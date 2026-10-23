@@ -32,8 +32,8 @@ This is an **offline-hardened fork** of [ly05010419/MacNativeGames](https://gith
 7. **Do not commit or push unless the user asks.** Show `git status` / the diff for review first.
 8. **Never `git pull --rebase` / rebase `main`.** History contains merge commits whose conflict resolutions hold the
    offline adaptations; a rebase drops them. Use `git pull --ff-only` or `--no-rebase`.
-9. **`games/awakening/` belongs to a separate agent** (proof of concept, branch `awakening-poc`). Do not touch it or
-   include it in commits on `main`.
+9. **`games/awakening/` is developed by a separate agent on branch `awakening-poc`** (proof of concept). Do not edit
+   it on `main`; the branch is merged into `main` only when the user asks (`merge: awakening-poc (<summary>)`).
 
 ## Directory structure
 
@@ -43,6 +43,7 @@ This is an **offline-hardened fork** of [ly05010419/MacNativeGames](https://gith
 | `games/totk/` | Shared TOTK + BotW runtime (`runtime/`), NVN-on-Metal (`third_party/d2r_gfx`), rewriter, scripts, iOS project (`ios/`), translator sources (`tools/totk_xlate`), `Makefile` | tracked |
 | `games/botw/` | BotW-specific assets, scripts, expected hashes | tracked |
 | `games/odyssey/`, `games/by3/` | Other ports; each carries its own copies (see CONTRIBUTING) | tracked |
+| `games/awakening/` | Link's Awakening proof of concept (notes so far), developed on `awakening-poc` (rule 9) | tracked |
 | `vendor/ryujinx/` | Ryujinx shader translator sources (patched at build) | tracked |
 | `tools/` | `homebrew_pins.py` (pin check/update), disabled `download_dependencies.py` | tracked |
 | `tests/` | Python unit tests (`unittest`), incl. offline/supply-chain guards | tracked |
