@@ -105,7 +105,7 @@ class SourceTranslatorTests(unittest.TestCase):
         commands = result.stdout + result.stderr
         self.assertIn('publish_native.sh', commands)
         self.assertIn(str(build_app.SOURCE_TRANSLATOR.parent.relative_to(ROOT)), commands)
-        game = subprocess.run(['just', '--dry-run', 'build-totk'], cwd=ROOT, capture_output=True, text=True, check=True)
+        game = subprocess.run(['just', '--dry-run', 'build'], cwd=ROOT, capture_output=True, text=True, check=True)
         self.assertIn('build_app.py', game.stdout + game.stderr)
         self.assertNotIn('publish_native.sh', game.stdout + game.stderr)
 

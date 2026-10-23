@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Sign the unsigned TOTK (or Breath of the Wild) IPA with a DEDICATED signing Apple ID and install it on a connected iPhone / iPad.
+"""Sign the unsigned TOTK (or Breath of the Wild) app with a DEDICATED signing Apple ID and install it on an iPhone / iPad / Vision Pro.
 
 A free (Personal Team) Apple ID signs for 7 days, a paid membership for a year: run this again to renew. Reinstalling
 with the same team and bundle identifier keeps the saves and the shader cache (they are in the app's Documents).
@@ -19,7 +19,7 @@ separate Apple ID created just for signing these IPAs. There is no "pick the onl
                                authenticates with this key instead of any Apple ID signed in to Xcode
 Without an API key, add the dedicated Apple ID in Xcode > Settings > Accounts; Xcode provisions with the account that owns
 the pinned team. The provisioning profile and the signing certificate are both checked to belong to the pinned team
-before anything is signed. `just install-totk-ios` reads these from .signing.env (gitignored; see .signing.env.example).
+before anything is signed. `just install <device>` reads these from .signing.env (gitignored; see .signing.env.example).
 The provisioning profile comes from a throwaway Xcode project built with the same bundle identifier and entitlements
 (-allowProvisioningUpdates registers the device and the App ID).
 """
@@ -45,14 +45,14 @@ def devices():
     with tempfile.NamedTemporaryFile(suffix='.json') as f:
         run(['xcrun','devicectl','list','devices','--json-output',f.name], capture_output=True)
         return [d for d in json.load(open(f.name))['result']['devices']
-                if d.get('hardwareProperties',{}).get('platform') == 'iOS']
+                if d.get('hardwareProperties',{}).get('platform') in ('iOS', 'visionOS')]
 
 def pick_device(name):
     devs = devices()
     match = [d for d in devs if name in (d['deviceProperties'].get('name'), d['identifier'], d['hardwareProperties'].get('udid'))] if name else devs
     if len(match) != 1:
         listed = '\n'.join(f"  {d['deviceProperties'].get('name')} ({d['hardwareProperties'].get('marketingName')})" for d in devs)
-        sys.exit(f"choose the device with --device <name>:\n{listed}" if devs else 'no paired iPhone / iPad found: connect it with a cable and trust this Mac')
+        sys.exit(f"choose the device with --device <name>:\n{listed}" if devs else 'no paired iPhone / iPad / Vision Pro found: pair it with this Mac and enable Developer Mode')
     return match[0]
 
 def team_of_identity(signed_app):
@@ -86,17 +86,20 @@ def signing_team(arg):
     if team in forbidden: sys.exit(f'team {team} is listed in MNG_SIGNING_FORBIDDEN_TEAMS: refusing to sign with it')
     return team
 
-def profile(team, bundle_id, udid):
+def profile(team, bundle_id, udid, platform='ios'):
     """Build an empty app with the game's bundle identifier and entitlements; Xcode makes the profile for it."""
-    proj = CACHE/bundle_id; proj.mkdir(parents=True, exist_ok=True)
+    vision = platform == 'visionos'
+    project_platform = 'visionOS' if vision else 'iOS'
+    sdk = 'xros' if vision else 'iphoneos'
+    proj = CACHE/(bundle_id + ('.visionos' if vision else '')); proj.mkdir(parents=True, exist_ok=True)
     (proj/'main.m').write_text('int main(void) { return 0; }\n')
     (proj/'TOTK.entitlements').write_bytes(plistlib.dumps({ENTITLEMENT: True}))
     (proj/'project.yml').write_text(f'''name: TOTKSigning
-options: {{deploymentTarget: {{iOS: "26.0"}}}}
+options: {{deploymentTarget: {{{project_platform}: "26.0"}}}}
 targets:
   TOTK:
     type: application
-    platform: iOS
+    platform: {project_platform}
     sources: [main.m]
     settings:
       GENERATE_INFOPLIST_FILE: YES
@@ -116,7 +119,7 @@ targets:
     if r.returncode:
         errors = [l for l in log.read_text(errors='replace').splitlines() if 'error:' in l]
         sys.exit('Xcode could not make a provisioning profile:\n' + '\n'.join(errors[-8:]) + f'\nfull log: {log}')
-    app = derived/'Build/Products/Debug-iphoneos/TOTK.app'
+    app = derived/f'Build/Products/Debug-{sdk}/TOTK.app'
     return app/'embedded.mobileprovision', app
 
 def identity_of(signed_app):
@@ -253,9 +256,17 @@ def built_bundle_id(ipa, team):
     bid = bid.removesuffix('.' + team.lower())
     return bid if bid.startswith(('org.macnativegames.', 'org.mng.')) else 'org.macnativegames.totk'
 
+def built_platform(ipa):
+    """Choose signing from the app, so an iPad-compatible build on a Vision Pro still gets an iOS profile."""
+    if ipa.is_dir(): raw = (ipa/'Info.plist').read_bytes()
+    else:
+        with zipfile.ZipFile(ipa) as z: raw = z.read('Payload/TOTK.app/Info.plist')
+    info = plistlib.loads(raw)
+    return 'visionos' if info.get('DTPlatformName') == 'xros' or 'XROS' in info.get('CFBundleSupportedPlatforms', []) else 'ios'
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument('ipa', type=Path, help='the unsigned IPA (or .app folder) from build_app.py --platform ios')
+    ap.add_argument('ipa', type=Path, help='the unsigned IPA (or .app folder) from build_app.py --platform ios or visionos')
     ap.add_argument('--device', help='device name (as in Finder) or identifier; needed when several are paired')
     ap.add_argument('--team', help='team ID of the dedicated signing Apple ID (default: $MNG_SIGNING_TEAM; required)')
     ap.add_argument('--bundle-id', help='default: the build\'s identifier (org.macnativegames.totk or .botw) + .<team>, so it is free to register on your team')
@@ -268,7 +279,10 @@ def main():
     print(f"team {team}, bundle {bundle_id}, device {dev['deviceProperties'].get('name')} ({udid})")
 
     print('provisioning profile: asking Xcode')
-    prov, signed = profile(team, bundle_id, udid)
+    platform = built_platform(a.ipa)
+    if platform == 'visionos' and dev['hardwareProperties'].get('platform') != 'visionOS':
+        sys.exit('this is a native Vision Pro app: choose a paired Vision Pro with --device')
+    prov, signed = profile(team, bundle_id, udid, platform)
     info = plistlib.loads(out(['security','cms','-D','-i',prov]).encode())
     ents = info['Entitlements']
     if team not in info.get('TeamIdentifier', []) or team_of_identity(signed) != team:
@@ -298,12 +312,13 @@ def main():
                                                                 'get-task-allow', ENTITLEMENT) if k in ents}))
     print('signing (a few minutes: every game file is hashed)')
     run(['codesign','--force','--sign',identity_of(signed),'--entitlements',entfile,'--generate-entitlement-der',app])
-    print('installing (a few minutes over the cable)')
+    print('installing over Wi-Fi' if dev['hardwareProperties'].get('platform') == 'visionOS' else 'installing (a few minutes over the cable)')
     run(['xcrun','devicectl','device','install','app','--device',dev['identifier'],app])
     if a.game_data: push_game_data(dev['identifier'], bundle_id, a.game_data)
     seed = a.ipa.with_name(a.ipa.stem + '-shader-seed')   # build_ipa.py --image-outside
     if a.ipa.is_dir() and not (app/'GameData/shader-seed').is_dir() and (seed/'fingerprint.txt').is_file():
         push_seed(dev['identifier'], bundle_id, seed)
-    print('installed. First time on this device: Settings > General > VPN & Device Management > trust your Apple ID.')
+    management = 'Device Management' if dev['hardwareProperties'].get('platform') == 'visionOS' else 'VPN & Device Management'
+    print(f'installed. First time on this device: Settings > General > {management} > trust the signing Apple ID.')
 
 if __name__ == '__main__': main()

@@ -133,15 +133,33 @@ class OfflineDependencyTests(unittest.TestCase):
             path.write_text('local source fixture')
         argv = [str(script), str(self.root / 'ios-deps'), '--sources', str(sources)]
         with mock.patch.object(sys, 'argv', argv), mock.patch.object(subprocess, 'run') as run, \
-             mock.patch.object(subprocess, 'check_output', side_effect=['/sdk/iPhoneOS.sdk', '/Xcode/Developer']), \
+             mock.patch.object(subprocess, 'check_output', side_effect=['/sdk/iPhoneOS.sdk', '/sdk/iPhoneOS.sdk', '/Xcode/Developer']), \
              mock.patch.object(shutil, 'copy2'), mock.patch.object(shutil, 'copytree'):
             runpy.run_path(str(script), run_name='__main__')
+        self.assert_local_only(run, sources, 'iOS')
+
+    def test_visionos_compilation_uses_only_staged_sources(self):
+        script = Path(build_app.__file__).parent / 'games/totk/ios/tools/build_deps.py'
+        sources = (self.root / 'xros-source').resolve()
+        for relative in ('opus/CMakeLists.txt', 'libvpx/configure'):
+            path = sources / relative
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('local source fixture')
+        argv = [str(script), str(self.root / 'xros-deps'), 'xros', '--sources', str(sources)]
+        with mock.patch.object(sys, 'argv', argv), mock.patch.object(subprocess, 'run') as run, \
+             mock.patch.object(subprocess, 'check_output', side_effect=['/sdk/XROS.sdk', '/sdk/iPhoneOS.sdk', '/Xcode/Developer']), \
+             mock.patch.object(shutil, 'copy2'), mock.patch.object(shutil, 'copytree'):
+            runpy.run_path(str(script), run_name='__main__')
+        self.assert_local_only(run, sources, 'visionOS')
+
+    def assert_local_only(self, run, sources, system):
         commands = [call.args[0] for call in run.call_args_list]
         self.assertFalse(any(cmd[0] == 'git' for cmd in commands))
         self.assertFalse(any('https://' in str(arg) for cmd in commands for arg in cmd))
         cmake = commands[0]
         self.assertEqual(cmake[cmake.index('-S') + 1], str(sources / 'opus'))
         self.assertIn('-DFETCHCONTENT_FULLY_DISCONNECTED=ON', cmake)
+        self.assertIn(f'-DCMAKE_SYSTEM_NAME={system}', cmake)
         configure = next(cmd for cmd in commands if str(cmd[0]).endswith('/configure'))
         self.assertEqual(configure[0], str(sources / 'libvpx/configure'))
 

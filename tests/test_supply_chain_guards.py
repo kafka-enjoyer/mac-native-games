@@ -2,6 +2,7 @@
 import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -120,10 +121,39 @@ class DedicatedSigningTeamTests(unittest.TestCase):
                              ['-authenticationKeyPath', '-authenticationKeyID', '-authenticationKeyIssuerID'])
 
 
+@unittest.skipUnless(shutil.which('just'), 'just is not installed')
 class JustfileTests(unittest.TestCase):
-    def test_ios_rebuild_skips_the_shader_contribution_agent(self):
-        recipe = (REPO / '.justfile').read_text().split('built-totk-ios:')[1].split('\n\n')[0]
-        self.assertIn('--no-shader-reminder', recipe)
+    def resolve(self, game, platform):
+        """The shell assignments the build / install recipes use, evaluated by bash into a dict."""
+        script = (f'set -e; resolved=$(just _resolve {game} {platform}); eval "$resolved"; '
+                  'printf "%s\\0" "$out" "$work" "$flag" "${inputs[*]}" "${extra[*]-}"')
+        r = subprocess.run(['bash', '-c', script], cwd=REPO, capture_output=True, text=True)
+        if r.returncode:
+            return None
+        return dict(zip(('out', 'work', 'flag', 'inputs', 'extra'), r.stdout.split('\0')))
+
+    def test_releases_go_to_dist_game_platform_with_one_ipa_name(self):
+        self.assertEqual(self.resolve('totk', 'mac')['out'], 'dist/totk/mac/Tears of the Kingdom.app')
+        self.assertEqual(self.resolve('totk', 'ios')['out'], 'dist/totk/ios/Tears of the Kingdom.ipa')
+        self.assertEqual(self.resolve('totk', 'visionos')['out'], 'dist/totk/visionos/Tears of the Kingdom.ipa')
+        self.assertEqual(self.resolve('botw', 'mac')['out'], 'dist/botw/mac/Breath of the Wild.app')
+
+    def test_inputs_come_from_dumps_and_work_is_shared_per_game(self):
+        for game in ('totk', 'botw'):
+            works = {self.resolve(game, p)['work'] for p in ('mac', 'ios')}
+            self.assertEqual(works, {f'build-artifacts/work/{game}'})
+            paths = [a for a in self.resolve(game, 'mac')['inputs'].split() if not a.startswith('--')]
+            self.assertTrue(paths and all(p.startswith('dumps/') for p in paths), paths)
+        self.assertEqual(self.resolve('botw', 'mac')['inputs'].split().count('--dlc'), 2)
+
+    def test_device_builds_skip_the_shader_contribution_agent(self):
+        self.assertEqual(self.resolve('totk', 'ios')['extra'], '--no-shader-reminder')
+        self.assertEqual(self.resolve('totk', 'visionos')['extra'], '--no-shader-reminder')
+        self.assertEqual(self.resolve('totk', 'mac')['extra'], '')
+
+    def test_unsupported_choices_are_refused(self):
+        for game, platform in (('botw', 'visionos'), ('zelda', 'mac'), ('totk', 'android'), ('../x', 'mac')):
+            self.assertIsNone(self.resolve(game, platform), (game, platform))
 
 
 if __name__ == '__main__':

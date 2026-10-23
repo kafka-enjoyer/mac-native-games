@@ -37,7 +37,7 @@ The native executable and its hash are written to
 `build-artifacts/translator-offline/native/`. `build_app.py` requires this local
 source build and stages a private, verified copy for shader preparation and app
 packaging; it never uses `games/totk/prebuilt`. Run this recipe once before
-`just build-totk`, and again after changing the translator. It is intentionally
+`just build`, and again after changing the translator. It is intentionally
 not an automatic dependency of every game build, so unchanged shader caches can
 be reused. The packaged Mac helper retains its Homebrew OpenSSL/Brotli runtime
 dependencies; it is not a fully static, portable replacement.
