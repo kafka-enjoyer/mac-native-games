@@ -27,3 +27,24 @@ games/totk/tools/totk_xlate/bin/
 games/totk/scripts/shader_inventory/obj/
 games/totk/scripts/shader_inventory/bin/
 ultracode.md
+# local offline copy: game dumps/keys, vendored dependency bundle, source-built translator, packaged output
+/dumps/
+# the large vendored blobs stay local; the small hash lists / locks / pins the build trusts are tracked, so any
+# change to them (the dependency-injection guard) shows up in git diff
+/dependencies/*
+!/dependencies/README.md
+!/dependencies/manifest.json
+!/dependencies/requirements-macos-arm64-py314.lock
+!/dependencies/homebrew-pins.json
+!/dependencies/dotnet/
+/dependencies/dotnet/*
+!/dependencies/dotnet/README.md
+!/dependencies/dotnet/NuGet.Config
+!/dependencies/dotnet/SHA256SUMS
+!/dependencies/dotnet/global.json
+!/dependencies/dotnet/toolchain.txt
+!/dependencies/dotnet/locks/
+# signing settings of the dedicated signing Apple ID (see .signing.env.example)
+/.signing.env
+/build-artifacts/
+/dist/

@@ -1,0 +1,50 @@
+{
+  "mac-runtime": {
+    "libvpx": {
+      "files": {
+        "include/vpx/vp8.h": "8bd4f03ef5771d7f08b103733f09bd5fdb665c0b1a0f039a5ca1b9c4fbd0bdb8",
+        "include/vpx/vp8cx.h": "fe9e1a42a7e2fe33fcfd39ff1ec03c0748ea88a1fc991a2e46d065475b4d840f",
+        "include/vpx/vp8dx.h": "f3d98bda5d043879b8e37f01ee2fcfe9419461367a277c34eaef7811680f4021",
+        "include/vpx/vpx_codec.h": "713a1a1a82968c084f5aab4e7026891001e67b98af420ca3896c7fbdcb0c1890",
+        "include/vpx/vpx_decoder.h": "aa784c3f27af14aa7a9e4d14386aee523eb3e50f957194e5c690bb83855eff43",
+        "include/vpx/vpx_encoder.h": "16f5d79236eaccec01460d744a5cb2f8ee132af03b31bc46d26a44263159c421",
+        "include/vpx/vpx_ext_ratectrl.h": "9e76374c929ff0d93820af19944934a0539feaaad8a779c8d91dd199bf1fe854",
+        "include/vpx/vpx_frame_buffer.h": "edc0bc4626e4c93e668a9d1ed6c58316df905c2187384480d58f47c44acfcb22",
+        "include/vpx/vpx_image.h": "64266026294553542b6a894d1aa339dc6348aec87465cea48e6eb4043e067aae",
+        "include/vpx/vpx_integer.h": "531c1ea958f1ad7e29cc95dd7bb1dc7ee4b2cde00c099883f05924e2e5930eb1",
+        "include/vpx/vpx_tpl.h": "171e470f7118595b1467a9181edbae879a5a1ac48cdc3b2d01edd84ccf699243",
+        "lib/libvpx.a": "4dea85650137d66fd04bf0447a316421312c0f2a0cd6966fd9c9b9f2f7114946"
+      },
+      "version": "1.17.0"
+    },
+    "opus": {
+      "files": {
+        "include/opus/opus.h": "036f6a6e83a20e943505743e113e90d6278cbe8240f7d5bb90b3f86261e783e3",
+        "include/opus/opus_defines.h": "bbd4d4e3ba99f6982b1c8d8f5541814ad77d8e8babf3cc788cf23d517b2ca9d6",
+        "include/opus/opus_multistream.h": "fd99c4594b4b57e406e9cab45a777895dd1b4c8de067088aa54ed7ae100b13f0",
+        "include/opus/opus_projection.h": "11b3427e9ca342308a93adc9a081e2479685e5b7811a3a53540609f1bbc488ad",
+        "include/opus/opus_types.h": "19cb301ea1eedbcbdbb5049363de061893bf11c20e505a657b69ce6ffa5b11fa",
+        "lib/libopus.a": "3952ce53ef7b9b3a890659db306481402a287ff9ebf18563ef4d259c40dd0e95"
+      },
+      "version": "1.6.1"
+    }
+  },
+  "translator": {
+    "brotli": {
+      "files": {
+        "lib/libbrotlicommon.1.dylib": "3426742c78df5c3b523071df603f07f2bb8dea6bd8e65c366a2c6adf2bf0a3ad",
+        "lib/libbrotlidec.1.dylib": "d7ac1e69b6c443341fb4302de0169d187489d58d8a641c8eadd6db9ca2cd0cbf",
+        "lib/libbrotlienc.1.dylib": "32e38a8ab06c8770ea4bfaf11ea324d7bcb6fe5f07eaff9d6260f93984ee6729"
+      },
+      "version": "1.2.0"
+    },
+    "openssl@4": {
+      "files": {
+        "lib/libcrypto.4.dylib": "5258d66dd91140ab48fdf294c4cfd752e2d99e7f93fc620d91a2226492518d4d",
+        "lib/libssl.4.dylib": "30e9143e497a5c94cf7d46ac2985da20f3a0e15097e0711e71b5dd95a537d8e0",
+        "lib/ossl-modules/legacy.dylib": "d3aa6940aa2a14ceb16b710da4b31385f008d9e4cd1d576eaa7e3a478d5cbe24"
+      },
+      "version": "4.0.3"
+    }
+  }
+}

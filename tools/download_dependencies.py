@@ -1,0 +1,108 @@
+#!/usr/bin/env python3
+"""Explicit ONLINE preparation step. The app build never invokes this script.
+
+Run with Python 3.14 on an Apple silicon Mac. Downloads source snapshots and
+binary wheels, including transitive Python dependencies, into dependencies/.
+Existing manifest commits and Python versions are reused on subsequent runs.
+"""
+import hashlib
+import json
+import platform
+import subprocess
+import sys
+import tarfile
+import tempfile
+from email.parser import BytesParser
+from pathlib import Path
+from zipfile import ZipFile
+
+ROOT = Path(__file__).resolve().parents[1]
+DEST = ROOT / 'dependencies'
+SOURCES = {
+    'SPIRV-Cross': ('https://github.com/KhronosGroup/SPIRV-Cross.git', 'aa217aeb6c9f0ace7a0ab233b28807edf45eb165'),
+    'hactool': ('https://github.com/SciresM/hactool.git', '1d64a83450e025622f3468c28fc4164dad2c5ef6'),
+    'opus': ('https://github.com/xiph/opus.git', 'v1.6.1'),
+    'libvpx': ('https://chromium.googlesource.com/webm/libvpx.git', 'v1.16.0'),
+}
+
+
+# DISABLED (dependency-injection guard). This script downloads source snapshots from GitHub/Chromium and Python wheels from
+# PyPI, and rewrites dependencies/ (including manifest.json, the hashes the build trusts) from whatever the network
+# returns. The offline build must only ever use the reviewed, hash-pinned bundle that already exists, so running this is
+# an error. To refresh dependencies deliberately: re-enable it in a reviewed change, run it on an isolated machine,
+# and review the resulting manifest/lock/hash diff before it reaches this tree.
+DISABLED = ('tools/download_dependencies.py is disabled: it fetches code from the network and rewrites the pinned '
+            'dependencies/ bundle (see the comment above DISABLED for why and how to refresh deliberately)')
+
+
+def sha256(path):
+    with path.open('rb') as f:
+        return hashlib.file_digest(f, 'sha256').hexdigest()
+
+
+def run(args):
+    raise RuntimeError(DISABLED)   # every git/pip call goes through here
+    subprocess.run([str(a) for a in args], check=True)
+
+
+def main():
+    raise RuntimeError(DISABLED)
+    if sys.version_info[:2] != (3, 14) or platform.system() != 'Darwin' or platform.machine() != 'arm64':
+        raise SystemExit('Run with python3.14 on an Apple silicon Mac (the wheelhouse is platform-specific).')
+    manifest_path = DEST / 'manifest.json'
+    previous = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
+    lock = DEST / 'requirements-macos-arm64-py314.lock'
+    input_digest = sha256(ROOT / 'games/totk/requirements.txt')
+    if lock.exists() and previous.get('input_requirements_sha256') != input_digest:
+        raise SystemExit(f'Input requirements changed. Review them, then remove {lock} to explicitly resolve a new lock.')
+    manifest = {'python': '3.14', 'platform': 'macos-arm64', 'sources': {},
+                'input_requirements_sha256': input_digest}
+    DEST.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='macnative-deps-') as folder:
+        temp = Path(folder)
+        for name, (url, ref) in SOURCES.items():
+            pinned = previous.get('sources', {}).get(name, {}).get('commit', ref)
+            checkout = temp / name
+            run(['git', 'init', '-q', checkout])
+            run(['git', '-C', checkout, 'fetch', '--depth', '1', url, pinned])
+            commit = subprocess.check_output(['git', '-C', checkout, 'rev-parse', 'FETCH_HEAD'], text=True).strip()
+            archive = temp / f'{name}.tar'
+            run(['git', '-C', checkout, 'archive', '--format=tar', f'--output={archive}', commit])
+            snapshot = temp / f'{name}-source'
+            snapshot.mkdir()
+            with tarfile.open(archive) as source:
+                source.extractall(snapshot, filter='data')
+            # Reject links so the manifest describes every byte consumed by the build.
+            if any(p.is_symlink() for p in snapshot.rglob('*')):
+                raise SystemExit(f'{name}: source contains symlinks; review before vendoring')
+            files = {p.relative_to(snapshot).as_posix(): sha256(p)
+                     for p in sorted(snapshot.rglob('*')) if p.is_file()}
+            dest = DEST / 'sources' / name
+            dest.mkdir(parents=True, exist_ok=True)
+            run(['rsync', '-a', '--delete', f'{snapshot}/', f'{dest}/'])
+            manifest['sources'][name] = {'url': url, 'ref': ref, 'commit': commit, 'files': files}
+            print(f'{name}: {commit} ({len(files)} files)', flush=True)
+
+        wheels = temp / 'wheels'
+        requirements = ['--require-hashes', '--no-deps', '-r', lock] if lock.exists() else [
+            '-r', ROOT / 'games/totk/requirements.txt']
+        run([sys.executable, '-m', 'pip', '--isolated', '--disable-pip-version-check',
+             'download', '--only-binary=:all:', '--dest', wheels, *requirements])
+        lines = ['# Python 3.14 / macOS arm64. Includes ALL transitive dependencies.',
+                 '# Generated by tools/download_dependencies.py; install offline with --require-hashes --no-deps.']
+        for wheel in sorted(wheels.glob('*.whl')):
+            with ZipFile(wheel) as package:
+                metadata_path = next(n for n in package.namelist() if n.endswith('.dist-info/METADATA'))
+                metadata = BytesParser().parsebytes(package.read(metadata_path))
+            lines.append(f'{metadata["Name"]}=={metadata["Version"]} --hash=sha256:{sha256(wheel)}')
+        lock.write_text('\n'.join(lines) + '\n')
+        (DEST / 'wheels').mkdir(exist_ok=True)
+        run(['rsync', '-a', '--delete', f'{wheels}/', f'{DEST / "wheels"}/'])
+        manifest['wheels'] = {p.name: sha256(p) for p in sorted((DEST / 'wheels').glob('*.whl'))}
+        manifest['requirements_sha256'] = sha256(lock)
+        manifest_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + '\n')
+    print(f'Offline dependencies ready: {DEST}')
+
+
+if __name__ == '__main__':
+    main()

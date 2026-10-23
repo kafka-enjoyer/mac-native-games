@@ -1,30 +1,42 @@
 #!/usr/bin/env python3
-"""Build the audio and VP9 static libraries for a physical iOS device."""
-import os, subprocess, sys, tempfile
+"""Build iOS audio/VP9 libraries from local snapshots staged by build_app.py. Never fetch."""
+import argparse, os, shutil, subprocess, tempfile
 from pathlib import Path
 
-out = Path(sys.argv[1]).resolve(); out.mkdir(parents=True, exist_ok=True)
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('out', type=Path)
+parser.add_argument('--sources', type=Path, required=True, help='work/src containing verified opus and libvpx snapshots')
+args = parser.parse_args()
+out = args.out.resolve(); sources = args.sources.resolve()
+for required in (sources/'opus/CMakeLists.txt', sources/'libvpx/configure'):
+    if not required.is_file():
+        parser.error(f'missing local dependency: {required}; prepare dependencies/ and run build_app.py first (no download fallback)')
+out.mkdir(parents=True, exist_ok=True)
 # libvpx's configure splits its compiler path and flags on spaces: when the work folder has one
 # (e.g. "Tears of the Kingdom/TOTK_build"), sources and build trees go under a space-free root instead.
-root = out if ' ' not in str(out) else Path(tempfile.gettempdir()).resolve()/'macnativegames-ios-deps'
+spaced = ' ' in str(out) or ' ' in str(sources)
+root = out if not spaced else Path(tempfile.gettempdir()).resolve()/'macnativegames-ios-deps'
 sdk = subprocess.check_output(['xcrun','--sdk','iphoneos','--show-sdk-path'], text=True).strip()
-src = root/'src'; build = root/'build'; src.mkdir(parents=True, exist_ok=True); build.mkdir(exist_ok=True)
+src = root/'src' if spaced else sources; build = root/'build'; build.mkdir(parents=True, exist_ok=True)
+if spaced:   # copy the verified local snapshots (no fetch) to the space-free root
+    for name in ('opus', 'libvpx'):
+        src.mkdir(parents=True, exist_ok=True)
+        subprocess.run(['rsync','-a','--delete',f'{sources/name}/',f'{src/name}/'], check=True)
 sdklink=root/'sdkroot/Platforms/iPhoneOS.platform/Developer/SDKs'/Path(sdk).name
 if sdklink.is_symlink(): sdklink.unlink()
 sdklink.parent.mkdir(parents=True,exist_ok=True)
 if not sdklink.exists(): sdklink.symlink_to(sdk)
 def run(cmd, cwd=None, env=None): subprocess.run(cmd, cwd=cwd, env=env, check=True)
-def checkout(url, tag, dest):
-    if not (dest/'.git').exists(): run(['git','clone','--depth','1','--branch',tag,url,str(dest)])
 
-opus=src/'opus'; checkout('https://github.com/xiph/opus.git','v1.6.1',opus)
+opus=src/'opus'
 opus_build=build/'opus-ninja'
 run(['cmake','-G','Ninja','-S',str(opus),'-B',str(opus_build),'-DCMAKE_SYSTEM_NAME=iOS',f'-DCMAKE_OSX_SYSROOT={sdklink}',
      '-DCMAKE_OSX_ARCHITECTURES=arm64','-DCMAKE_OSX_DEPLOYMENT_TARGET=26.0','-DOPUS_BUILD_SHARED_LIBRARY=OFF',
-     '-DOPUS_BUILD_TESTING=OFF','-DOPUS_BUILD_PROGRAMS=OFF','-DOPUS_INSTALL_PKG_CONFIG_MODULE=OFF','-DCMAKE_BUILD_TYPE=Release'])
+     '-DOPUS_BUILD_TESTING=OFF','-DOPUS_BUILD_PROGRAMS=OFF','-DOPUS_INSTALL_PKG_CONFIG_MODULE=OFF','-DCMAKE_BUILD_TYPE=Release',
+     '-DOPUS_PACKAGE_VERSION=1.6.1','-DFETCHCONTENT_FULLY_DISCONNECTED=ON','-DFETCHCONTENT_UPDATES_DISCONNECTED=ON'])
 run(['cmake','--build',str(opus_build),'--config','Release','-j'])
 
-vpx=src/'libvpx'; checkout('https://chromium.googlesource.com/webm/libvpx.git','v1.16.0',vpx)
+vpx=src/'libvpx'
 vpxout=build/'libvpx'; vpxout.mkdir(exist_ok=True)
 bindir=build/'ios-bin'; bindir.mkdir(exist_ok=True)
 real_sdk=sdk; real_tools=Path(os.environ.get('DEVELOPER_DIR',subprocess.check_output(['xcode-select','-p'],text=True).strip()))/'Toolchains/XcodeDefault.xctoolchain/usr/bin'

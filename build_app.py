@@ -11,7 +11,7 @@ folder, extracted/firmware/shared-fonts); or 1.9.0 as a base NSP with --update <
 or --shared-fonts as for a Tears of the Kingdom NSP; its add-on content (DLC) comes from --dlc <pack.nsp>, repeated for the
 two packs (01007EF00011F001, 01007EF00011F002), each one optional and checked against its pin. Its startup shaders come from its game data and its own shared shader list
 (games/botw/assets/shader_list.tsv). The game is recognised by the title IDs in the file, never by the file name.
-NSPs need common tickets (unless rights-free) and a separate shared-font source. iOS builds are unsigned IPAs for sideloading and require Xcode 26+, xcodegen, CMake, and network access to build device libraries.
+NSPs need common tickets (unless rights-free) and a separate shared-font source. iOS builds are unsigned IPAs for sideloading and require Xcode 26+, xcodegen and CMake. All build dependencies must already be present locally in dependencies/.
 Nothing from the game is in this repository; everything is made from your files on your Mac. Key values are never printed.
 
 Steps (each one checked against games/totk/assets/expected-v<version>.json, so a damaged dump or another version stops the
@@ -22,9 +22,9 @@ signature, or signed again by a dump tool once all four code modules match, shar
      games/totk/scripts/patch_sites.py), the three code modules rewritten for Apple silicon
      (games/totk/third_party/d2r)
   2. data: RomFS (17 GB), the system shared fonts (from XCI firmware or an explicit font source), the RomFS overlays
-  3. shaders: SPIRV-Cross (fetched at a pinned commit, compiled with clang) and the shader translator, which ships
-     ready-made as a native program (games/totk/prebuilt/macos-arm64: vendor/ryujinx + patches + Service.cs, made with
-     games/totk/tools/totk_xlate/publish_native.sh); startup shaders are extracted from your selected RomFS and
+  3. shaders: SPIRV-Cross (local pinned snapshot, compiled with clang) and the source-built shader translator
+     (build-artifacts/translator-offline/native/totk_xlate, made offline with just build-translator from
+     vendor/ryujinx + patches + Service.cs); startup shaders are extracted from your selected RomFS and
      translated into a bundled seed, ready for GPU warm-up even with an empty cache on the first launch
   4. the game binary and either a macOS app bundle or an unsigned iPhone/iPad IPA (large game data is cloned when possible);
      for the Mac the startup shaders are then compiled once into this Mac's Metal cache (about 12 minutes for 1.4.3 on an M4 Max), so the
@@ -70,17 +70,18 @@ TITLES = {'0100F2C0115B6000': 'totk', '01007EF00011E000': 'botw'}
 # Per game: app name, bundle identifier, executable name (= the player's data folder under
 # ~/Library/Application Support/MacNativeGames, games/totk/runtime/game_version.h GAME_FOLDER)
 APPS = {'totk': ('Tears of the Kingdom', 'org.macnativegames.totk', 'TOTK'), 'botw': ('Breath of the Wild', 'org.macnativegames.botw', 'BotW')}
-HACTOOL = ('https://github.com/SciresM/hactool.git', '1d64a83450e025622f3468c28fc4164dad2c5ef6')
+DEPENDENCIES = REPO / 'dependencies'
+SOURCE_TRANSLATOR = REPO / 'build-artifacts/translator-offline/native/totk_xlate'
+STAGED_TRANSLATOR = Path('build/shader-service/totk_xlate')
 APP_NAME = 'Tears of the Kingdom'
 IOS_APP_NAME = 'TOTK'   # the iPhone / iPad home screen name: "Tears of the Kingdom" was cut to "Tears of the…" (user 2026-10-22)
-BUNDLE_ID = 'org.macnativegames.totk'
+BUNDLE_ID = 'org.mng.totk'
 # The languages the runtime gives the game (games/totk/runtime/services.c desired_language), as Info.plist
 # CFBundleLocalizations: macOS offers a per-app language in System Settings only for an app that lists them.
 # pt-BR only where the RomFS has the official USpt text (the 1.4.3 build, Breath of the Wild 1.9.0).
 GAME_LANGUAGES = ('en', 'ja', 'fr', 'de', 'es', 'it', 'nl', 'ru', 'ko', 'zh-Hans', 'zh-Hant')
 LSREGISTER = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
-# Pinned upstream sources fetched at build time (repository, commit)
-SPIRV_CROSS = ('https://github.com/KhronosGroup/SPIRV-Cross.git', 'aa217aeb6c9f0ace7a0ab233b28807edf45eb165')
+# Source commits and file hashes are recorded in dependencies/manifest.json. No build-time downloads.
 # The spirv-cross program: the sources and flags of SPIRV-Cross's own CMake Release build of it, so no cmake is needed
 SPIRV_CROSS_SOURCES = ('main.cpp', 'spirv_cfg.cpp', 'spirv_cpp.cpp', 'spirv_cross.cpp', 'spirv_cross_parsed_ir.cpp',
                        'spirv_cross_util.cpp', 'spirv_glsl.cpp', 'spirv_hlsl.cpp', 'spirv_msl.cpp', 'spirv_parser.cpp',
@@ -292,26 +293,79 @@ def prerequisites(args):
     missing = [p for p in ('opus', 'libvpx') if not (brew / 'opt' / p / 'lib').is_dir()]
     if missing:
         raise BuildError(f'Homebrew packages missing: brew install {" ".join(missing)}')
-    if not shutil.which('git', path=os.pathsep.join(TOOL_PATHS + ['/usr/bin'])):
-        raise BuildError('git not found: xcode-select --install')
-    py = next((p for p in (shutil.which(n, path=os.pathsep.join(TOOL_PATHS)) for n in ('python3.14', 'python3.15')) if p), None)
+    # The Mac binary links Homebrew opus/libvpx and the translator loads Homebrew OpenSSL/Brotli: only the exact
+    # versions and file hashes pinned in dependencies/homebrew-pins.json are accepted (see tools/homebrew_pins.py).
+    if drift := homebrew_pins().problems():
+        raise BuildError('Homebrew files differ from dependencies/homebrew-pins.json (dependency pin):\n  ' +
+                         '\n  '.join(drift) + '\nReinstall the pinned versions, or review the upgrade and re-pin with '
+                         'python3.14 tools/homebrew_pins.py update.')
+    py = shutil.which('python3.14', path=os.pathsep.join(TOOL_PATHS))
     if not py:
-        raise BuildError('Python 3.14 not found (the build reads zstd with the standard library): brew install python@3.14')
+        raise BuildError('Python 3.14 not found (the local wheels target 3.14): brew install python@3.14')
+    checked_translator(SOURCE_TRANSLATOR)
     return Path(py)
 
 
+def homebrew_pins():
+    """tools/homebrew_pins.py, loaded from this repository (never from the import path)."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('homebrew_pins', REPO / 'tools/homebrew_pins.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 # ---- work folder ----
-def git_fetch(url, commit, dst, log):
-    if (dst / '.git').is_dir() and subprocess.run(['git', '-C', dst, 'rev-parse', 'HEAD'], capture_output=True, text=True).stdout.strip() == commit:
-        return
+def offline_manifest():
+    try:
+        manifest = json.loads((DEPENDENCIES / 'manifest.json').read_text())
+        if manifest['python'] != '3.14' or manifest['platform'] != 'macos-arm64':
+            raise ValueError('expected Python 3.14 / macOS arm64 dependencies')
+        return manifest
+    except (OSError, ValueError, KeyError) as e:
+        raise BuildError(f'local dependency manifest unavailable or invalid: {e}. '
+                         'Restore dependencies/ from the reviewed offline copy before building '
+                         '(tools/download_dependencies.py is disabled).') from e
+
+
+def local_source(name, dst, log):
+    """Verify a vendored source snapshot and copy it to the writable work folder. Never fetch."""
+    entry = offline_manifest().get('sources', {}).get(name)
+    source = DEPENDENCIES / 'sources' / name
+    if not entry or not entry.get('files') or not source.is_dir() or source.is_symlink():
+        raise BuildError(f'missing local {name} sources: {source}; restore dependencies/ before building')
+    files = entry['files']
+    actual = {p.relative_to(source).as_posix() for p in source.rglob('*') if p.is_file() or p.is_symlink()}
+    if actual != set(files):
+        raise BuildError(f'local {name} source inventory changed; restore {source} before building')
+    for relative, digest in files.items():
+        path = source / relative
+        if path.is_symlink() or not path.is_file():
+            raise BuildError(f'local {name} source must be a regular file: {path}')
+        check(f'local {name}/{relative}', sha256(path), digest)
+    if dst.resolve() == source.resolve():
+        raise BuildError('the dependency work directory must not overwrite the vendored source')
     if dst.is_symlink():
-        dst.unlink()   # replace only the cache link, never its external target
-    elif dst.exists():
-        shutil.rmtree(dst)
-    dst.mkdir(parents=True)
-    run(['git', '-C', dst, 'init', '-q'], log)
-    run(['git', '-C', dst, 'fetch', '-q', '--depth', '1', url, commit], log)
-    run(['git', '-C', dst, 'checkout', '-q', 'FETCH_HEAD'], log)
+        dst.unlink()   # detach a dangling/old cache link without touching its external target
+    dst.mkdir(parents=True, exist_ok=True)
+    run(['rsync', '-a', '--delete', f'{source}/', f'{dst}/'], log)
+    return dst
+
+
+def local_python_dependencies():
+    manifest = offline_manifest()
+    lock = DEPENDENCIES / 'requirements-macos-arm64-py314.lock'
+    wheels = DEPENDENCIES / 'wheels'
+    if not lock.is_file() or not wheels.is_dir() or not manifest.get('wheels'):
+        raise BuildError('missing local Python lock/wheels; restore dependencies/ before building')
+    check('local Python lock', sha256(lock), manifest.get('requirements_sha256', ''))
+    check('Python input requirements', sha256(GAME / 'requirements.txt'), manifest.get('input_requirements_sha256', ''))
+    for name, digest in manifest['wheels'].items():
+        wheel = wheels / name
+        if Path(name).name != name or not wheel.is_file():
+            raise BuildError(f'missing local Python wheel: {name}; restore dependencies/wheels before building')
+        check(f'local wheel {name}', sha256(wheel), digest)
+    return lock, wheels
 
 
 def link(path, target):
@@ -323,17 +377,37 @@ def link(path, target):
     path.symlink_to(target)
 
 
-def prepare_work(work, py, logs):
-    """work/totk: the game folder of this repository with the generated files inside it (the build scripts write
-    extracted/, rewritten/, build/ and analysis/ next to themselves); its tooling/ points at the fetched sources."""
+def checked_translator(path):
+    """Accept only a runnable, hash-verified source build; never fall back to prebuilt/."""
+    try:
+        if not path.is_file() or not os.access(path, os.X_OK):
+            raise ValueError('missing executable or execute permission')
+        expected = path.with_suffix('.sha256').read_text().strip()
+        if len(expected) != 64 or any(c not in '0123456789abcdef' for c in expected) or sha256(path) != expected:
+            raise ValueError('SHA-256 does not match the source-build hash file')
+    except (OSError, ValueError) as error:
+        raise BuildError(f'source-built shader translator unavailable or invalid at {path}: {error}. '
+                         'Run `just build-translator`, then rerun the app build.') from error
+    return path
+
+
+def prepare_work(work, py, logs, *, ios=False):
+    """Copy sources into the work folder and install dependencies exclusively from local files."""
+    lock, wheels = local_python_dependencies()
+    translator = checked_translator(SOURCE_TRANSLATOR)
     tree = work / 'totk'
     tree.mkdir(parents=True, exist_ok=True)
     # Match both directories AND symlinks to directories. A trailing slash
     # allows rsync -a to copy a tooling symlink from a development checkout.
-    excludes = [f'--exclude=/{name}' for name in ('extracted', 'rewritten', 'build', 'analysis', '.venv', 'tooling', 'user-data')]
+    excludes = [f'--exclude=/{name}' for name in ('extracted', 'rewritten', 'build', 'analysis', '.venv', 'tooling', 'user-data', 'prebuilt')]
     run(['rsync', '-a', *excludes, f'{GAME}/', f'{tree}/'], logs / 'sources.log')
     # games/botw: its scripts find the shared ones at ../totk/scripts (work/botw next to work/totk)
     run(['rsync', '-a', *excludes, f'{BOTW}/', f'{work / "botw"}/'], logs / 'sources-botw.log')
+    # Snapshot the local source build so shader preparation and packaging use the same executable.
+    staged = tree / STAGED_TRANSLATOR
+    clone(translator, staged)
+    clone(translator.with_suffix('.sha256'), staged.with_suffix('.sha256'))
+    checked_translator(staged)
     tooling = tree / 'tooling'
     # Migrate a work folder made by the old copier before writing child links:
     # link(tooling/spirv-cross, ...) must not traverse into a shared checkout.
@@ -341,14 +415,21 @@ def prepare_work(work, py, logs):
         tooling.unlink()
     tooling.mkdir(exist_ok=True)
     src = work / 'src'
-    say('fetching the pinned SPIRV-Cross sources')
-    git_fetch(*SPIRV_CROSS, src / 'SPIRV-Cross', logs / 'fetch-spirv-cross.log')
+    say('using the local pinned SPIRV-Cross sources (offline)')
+    local_source('SPIRV-Cross', src / 'SPIRV-Cross', logs / 'copy-spirv-cross.log')
+    if ios:
+        for name in ('opus', 'libvpx'):
+            local_source(name, src / name, logs / f'copy-{name}.log')
     link(tooling / 'spirv-cross', src / 'SPIRV-Cross')
+    link(tooling / 'offline-deps', DEPENDENCIES)
     venv = work / 'venv'
     if not (venv / 'bin/python').exists():
         say('Python environment for the build tools')
         run([py, '-m', 'venv', venv], logs / 'venv.log')
-    run([venv / 'bin/python', '-m', 'pip', 'install', '-q', '-r', tree / 'requirements.txt'], logs / 'pip.log')
+    run([venv / 'bin/python', '-m', 'pip', '--isolated', '--disable-pip-version-check',
+         'install', '--no-index', '--find-links', wheels, '--only-binary=:all:',
+         '--require-hashes', '--no-deps', '--no-cache-dir', '-q', '-r', lock], logs / 'pip.log',
+        env=dict(os.environ, PIP_CONFIG_FILE=os.devnull))   # ignore global/site pip config too
     link(tree / '.venv', venv)
     (tree / 'analysis').mkdir(exist_ok=True)
     (tree / 'build').mkdir(exist_ok=True)
@@ -781,7 +862,7 @@ def step_data(tree, game, keys, logs, *, firmware=None, shared_fonts=None, mod=N
 
 def build_hactool(tree, logs):
     source = tree.parent / 'src/hactool'
-    git_fetch(*HACTOOL, source, logs/'fetch-hactool.log')
+    local_source('hactool', source, logs/'copy-hactool.log')
     # Add an explicit private title-key file, so base NSP and update tickets do not
     # need command-line keys or changes to the player's HOME/.switch files.
     main = source/'main.c'
@@ -934,12 +1015,7 @@ def step_shaders(tree, logs, *, version='v0'):
     if not (tree / 'build/spirv-cross/spirv-cross').exists():
         say('3/4 shaders: building SPIRV-Cross with clang')
         build_spirv_cross(tree, logs)
-    # the shader translation service: a native program in this repository (no .NET needed to build or to play)
-    translator = tree / 'prebuilt/macos-arm64/totk_xlate'
-    want = (translator.parent / 'totk_xlate.sha256').read_text().strip()
-    if not translator.is_file() or sha256(translator) != want:
-        raise BuildError(f'{translator}: not the shader translator this repository ships (its SHA-256 differs from '
-                         f'totk_xlate.sha256); check it out again, or rebuild it with games/totk/tools/totk_xlate/publish_native.sh')
+    translator = checked_translator(tree / STAGED_TRANSLATOR)
     say('3/4 shaders: discovering and translating startup shaders from your game data')
     run([tree/'.venv/bin/python', 'scripts/prepare_shader_seed.py',
          '--romfs', tree/f'extracted/{version}/romfs', '--output', tree/f'build/shader-seed/{version}',
@@ -1064,7 +1140,8 @@ def step_shader_libs(tree, logs, *, version='v0'):
 
 def step_binary(tree, game, keys, env, logs, *, version="v0", title='0100f2c0115b6000'):
     say('4/4 app: building the game binary and the launcher')
-    run(['make', f'-j{os.cpu_count() or 4}', 'runtime' if version == 'v0' else f'runtime-{version}'], logs / 'runtime.log', cwd=tree, env=env)
+    run(['make', f'-j{os.cpu_count() or 4}', f'HOMEBREW_PINS={REPO / "tools/homebrew_pins.py"}',
+         'runtime' if version == 'v0' else f'runtime-{version}'], logs / 'runtime.log', cwd=tree, env=env)
     # the launcher is per game and version (runtime/game_version.h: the data folder, the log name, the backup of saves)
     defines = [] if version == 'v0' else [f'-DGAME_{version.upper()}=1'] if version.startswith('botw') else [f'-DTOTK_GAME_{version.upper()}=1']
     run(['xcrun', 'clang', '-fobjc-arc', '-O2', '-Wall', '-Ithird_party/d2r_gfx/gfx/nvn', '-Iruntime', *defines, 'app/launcher.m', '-framework', 'AppKit',
@@ -1331,7 +1408,7 @@ def step_app(tree, out, logs, *, version="v0", game='totk'):
         files += [f'extracted/{version}/aoc/{index}/romfs.bin', f'extracted/{version}/aoc/{index}/runtime-index.bin']
     for rel in files:
         clone(tree / rel, res / rel)
-    clone(tree / 'prebuilt/macos-arm64/totk_xlate', res / 'build/shader-service/totk_xlate')   # where totk_shader_rt.m looks for it
+    clone(tree / STAGED_TRANSLATOR, res / STAGED_TRANSLATOR)   # same source-built helper used for shader preparation
     for rel in (f'extracted/{version}/romfs-patches', f'extracted/{version}/romfs-patches-out', 'extracted/firmware/shared-fonts'):
         if (tree / rel).is_dir():   # Breath of the Wild has no RomFS overlays
             copy_tree(tree / rel, res / rel)
@@ -1755,11 +1832,7 @@ def step_shaders_botw(tree, botw, logs, *, version='botw160'):
     if not (tree / 'build/spirv-cross/spirv-cross').exists():
         say('3/4 shaders: building SPIRV-Cross with clang')
         build_spirv_cross(tree, logs)
-    translator = tree / 'prebuilt/macos-arm64/totk_xlate'
-    want = (translator.parent / 'totk_xlate.sha256').read_text().strip()
-    if not translator.is_file() or sha256(translator) != want:
-        raise BuildError(f'{translator}: not the shader translator this repository ships (its SHA-256 differs from '
-                         f'totk_xlate.sha256); check it out again, or rebuild it with games/totk/tools/totk_xlate/publish_native.sh')
+    translator = checked_translator(tree / STAGED_TRANSLATOR)
     seed = tree / f'build/shader-seed/{version}'
     say('3/4 shaders: preparing the startup shaders from the game data and the shared shader list (a few minutes)')
     run([tree / '.venv/bin/python', botw / 'scripts/prepare_shader_seed.py', '--romfs', tree / f'extracted/{version}/romfs',
@@ -1855,7 +1928,7 @@ def main(argv):
     t0 = time.time()
     fresh_work = not work.exists()
     # The game decides the platforms, the work folder and the disk space needed, so it is identified before those checks.
-    tree = prepare_work(work, py, logs)
+    tree = prepare_work(work, py, logs, ios=args.platform == 'ios')
     which = identify_game(tree, game, keys, logs)
     if kind == 'nsp' and which != 'botw' and not fonts_given:   # only Breath of the Wild's fonts passed the check above
         raise no_fonts

@@ -36,6 +36,15 @@ ATTACHMENT = re.compile(r'https://github\.com/(?:user-attachments/files|[\w.-]+/
 MAX_BYTES = 8 << 20   # a contribution is a few hundred rows; anything this large is not one
 
 
+# DISABLED (dependency-injection guard). This maintainer tool downloads issue attachments and gist files written by
+# anyone on GitHub (urllib + the gh CLI, using your gh token) and merges them into the shared shader lists
+# (games/*/assets/shader_list.tsv) that every build reads. That is unreviewed third-party input flowing into build
+# inputs, so running it is an error. The offline parsing helpers below (attachment_urls, contribution_rows,
+# contribution_pipelines) stay importable for the tests; only the network entry points refuse to run.
+DISABLED = ('collect_shader_issues.py is disabled: it downloads third-party GitHub attachments into the shared shader '
+            'lists (see the comment above DISABLED for why)')
+
+
 def attachment_urls(body):
     """The attachment links in an issue body, in order, without repeats."""
     seen = []
@@ -80,6 +89,7 @@ def contribution_pipelines(text):
 
 
 def gh(*args):
+    raise RuntimeError(DISABLED)
     try:
         return subprocess.run(['gh', *args], capture_output=True, text=True, check=True).stdout
     except FileNotFoundError:
@@ -89,6 +99,7 @@ def gh(*args):
 
 
 def download(url, token):
+    raise RuntimeError(DISABLED)
     own = url.startswith('https://github.com/')   # the token goes to github.com only; gist raw files are public
     request = urllib.request.Request(url, headers={'Authorization': f'token {token}'} if token and own else {})
     with urllib.request.urlopen(request, timeout=60) as reply:
@@ -99,6 +110,7 @@ def download(url, token):
 
 
 def main():
+    raise RuntimeError(DISABLED)
     ap = argparse.ArgumentParser(description=__doc__.split('\n\n')[0])
     ap.add_argument('--game', choices=sorted(GAMES), default='totk', help='whose list and issues: totk (default) or botw')
     ap.add_argument('--repo', default=REPO)

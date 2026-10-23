@@ -64,7 +64,7 @@ def run_main(case, folder, base, update=None, dlcs=(), game='botw', stop='step_c
     for dlc in dlcs:
         argv += ['--dlc', str(dlc)]
 
-    def prepare_work(work, py, logs):
+    def prepare_work(work, py, logs, *, ios=False):
         work.mkdir(parents=True, exist_ok=True)
         return work / 'totk'
     mocks = dict(

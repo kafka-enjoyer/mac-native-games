@@ -80,7 +80,7 @@ Shaders are automatically collected, compiled and cached as you play. Returning 
 
 ## Build the app
 
-**1. Tools** (once): Xcode command line tools and [Homebrew](https://brew.sh). An internet connection is needed to install build dependencies and fetch pinned sources:
+**1. Tools** (once): Xcode command line tools and [Homebrew](https://brew.sh). An internet connection is needed to install these system tools; the app build itself uses the local offline dependency bundle:
 
 ```sh
 xcode-select --install
@@ -94,6 +94,10 @@ brew install xcodegen cmake ninja
 ```
 
 Optional: with Xcode's Metal toolchain (`xcodebuild -downloadComponent MetalToolchain`), the build compiles the startup shaders into the app. It finds an Xcode kept outside `/Applications` too (on another volume, or set `DEVELOPER_DIR`). Without it, the build compiles them into the Mac's own Metal cache for the app's location instead, which does not move with the app: after moving it, the first launch compiles them again.
+
+**Offline dependencies:** This copy includes pinned source snapshots and all Python wheels in [`dependencies/`](dependencies/README.md). Builds verify those local files and never fetch missing dependencies. Keep that folder with the project. The downloader (`tools/download_dependencies.py`) is disabled, and the Homebrew libraries the build links are pinned by version and SHA-256 in `dependencies/homebrew-pins.json` (`just verify-pins`). The bundled wheels require Python **3.14** on Apple silicon.
+
+**Source-built shader translator:** Run `just build-translator` once before building the app, and again after changing the translator sources. `build_app.py` verifies and uses `build-artifacts/translator-offline/native/totk_xlate`; it never falls back to the legacy precompiled executable. Then run `just build-totk` or the Python commands below.
 
 **2. Download or clone this repository**, then open Terminal in its `MacNativeGames` folder and run the script with your game file and keys:
 
@@ -117,11 +121,11 @@ To build an unsigned iPhone/iPad IPA instead, add `--platform ios` and use an `.
 python3.14 build_app.py ~/Games/totk.xci -k ~/keys/prod.keys --platform ios -o ~/Games/TOTK.ipa
 ```
 
-Add `--update ~/Games/1.4.3.nsp` to select an update, and keep the `--firmware` or `--shared-fonts` option when the base game is an NSP. The first iOS build downloads and compiles device versions of Opus and libvpx and compiles the shader seed for iOS, so it needs an internet connection and substantial temporary disk space (allow at least **45 GB free** for a fresh base build, or **60 GB** for a fresh build with an update). The resulting IPA is unsigned: sign and install it with your sideloading tool, keeping its entitlements (it uses the increased memory limit). Or let Xcode sign it with your own Apple ID (Xcode › Settings › Accounts; a free Personal Team works) and install it on the iPhone or iPad connected by cable: `python3.14 games/totk/ios/tools/install_device.py ~/Games/TOTK.ipa --device "<device name>"`. A free Apple ID signs for 7 days, a paid membership for a year; run the same command again to renew, which keeps your saves. iOS/iPadOS 26 and iPhone 14 or newer are required. See [iPhone and iPad](#iphone-and-ipad) for what has been tested.
+Add `--update ~/Games/1.4.3.nsp` to select an update, and keep the `--firmware` or `--shared-fonts` option when the base game is an NSP. The first iOS build compiles device versions of Opus and libvpx from the local snapshots and compiles the shader seed for iOS, so it needs substantial temporary disk space but no dependency downloads (allow at least **45 GB free** for a fresh base build, or **60 GB** for a fresh build with an update). The resulting IPA is unsigned: sign and install it with your sideloading tool, keeping its entitlements (it uses the increased memory limit). Or let Xcode sign it with your own Apple ID (Xcode › Settings › Accounts; a free Personal Team works) and install it on the iPhone or iPad connected by cable: `python3.14 games/totk/ios/tools/install_device.py ~/Games/TOTK.ipa --device "<device name>"`. A free Apple ID signs for 7 days, a paid membership for a year; run the same command again to renew, which keeps your saves. iOS/iPadOS 26 and iPhone 14 or newer are required. See [iPhone and iPad](#iphone-and-ipad) for what has been tested.
 
-Without `-o`, the selected output appears next to the game file (`Tears of the Kingdom.app` on Mac or `Tears of the Kingdom.ipa` for iOS). Before full shader preparation was added, a local clean base-1.0.0 Mac build took about 6 minutes on an M4 Mac mini (this is not a timing estimate for the current build; hardware, disk and network conditions affect the time): about a minute each to rewrite the main code module and to decrypt the 17 GB of game data, and two to three minutes for macOS to check the finished app once. The current build then also prepares the startup shaders (about 3 minutes for 1.4.3 on an M4) and compiles every prepared shader for your GPU (about 12 minutes for 1.4.3 on an M4 Max, longer on an 8 GB M1 MacBook Air, which runs out of memory and swaps during this step; without the Metal toolchain this step is skipped, with a message, while a game is running). A Mac build needs no .NET or CMake, and the finished game needs no Python: its shader translator is a native program that comes with this repository (`games/totk/prebuilt`). Every intermediate file is in a work folder next to the game file (`TOTK_build`, or `--work`); running the script again reuses what is already done.
+Without `-o`, the selected output appears next to the game file (`Tears of the Kingdom.app` on Mac or `Tears of the Kingdom.ipa` for iOS). Before full shader preparation was added, a local clean base-1.0.0 Mac build took about 6 minutes on an M4 Mac mini (this is not a timing estimate for the current build; hardware, disk and network conditions affect the time): about a minute each to rewrite the main code module and to decrypt the 17 GB of game data, and two to three minutes for macOS to check the finished app once. The current build then also prepares the startup shaders (about 3 minutes for 1.4.3 on an M4) and compiles every prepared shader for your GPU (about 12 minutes for 1.4.3 on an M4 Max, longer on an 8 GB M1 MacBook Air, which runs out of memory and swaps during this step; without the Metal toolchain this step is skipped, with a message, while a game is running). A Mac build needs no CMake. Building the translator first requires the pinned Homebrew .NET toolchain; the finished game needs neither Python nor a .NET runtime. Its native shader translator is your local source build in `build-artifacts/translator-offline/native` and retains its Homebrew OpenSSL/Brotli library dependencies. Every intermediate file is in a work folder next to the game file (`TOTK_build`, or `--work`); running the script again reuses what is already done.
 
-The extracted code modules, rewritten modules, RomFS and shared fonts are checked against the selected version's `games/totk/assets/expected-v1.0.0.json`, `expected-v1.1.2.json`, `expected-v1.2.1.json` or `expected-v1.4.3.json`; the prebuilt shader translator has its own SHA-256 check. A mismatch stops the build, with one exception: a different genuine retail dump of the same version is accepted — its `main.npdm` is checked by Nintendo’s ACID signature (`npdm_signed()`) instead of the pinned hash, and its firmware’s shared fonts are checked for a valid BFTTF structure and bound by their actual SHA-256. Key values are never printed.
+The extracted code modules, rewritten modules, RomFS and shared fonts are checked against the selected version's `games/totk/assets/expected-v1.0.0.json`, `expected-v1.1.2.json`, `expected-v1.2.1.json` or `expected-v1.4.3.json`; the source-built shader translator and its staged work-folder copy have their own SHA-256 checks. A mismatch stops the build, with one exception: a different genuine retail dump of the same version is accepted — its `main.npdm` is checked by Nintendo’s ACID signature (`npdm_signed()`) instead of the pinned hash, and its firmware’s shared fonts are checked for a valid BFTTF structure and bound by their actual SHA-256. Key values are never printed.
 
 Signing and verifying a large updated app can add several minutes. Keep the build running while it continues to report progress.
 
@@ -144,7 +148,7 @@ This produces the same **Tears of the Kingdom.app**, containing only the selecte
 
 You do not need to download separate 1.2.1 or 1.4.3 runtime tables or a shader cache. The build generates the version-specific runtime tables and first-launch shader seed from the game data you provide, then includes the shader seed in the app. The repository supplies the patch code and verified hashes of each supported update; only your base game, update and keys are external inputs.
 
-Allow about **40 GB free for a fresh update build**, or **19 GB extra** when the base data is already cached, with the app on the same APFS volume. The merge reads the base NCA through a bounded range of the original container, temporarily extracts the much smaller update NCA, and verifies every IVFC level. It fetches a pinned [hactool](https://github.com/SciresM/hactool) source and builds it with clang/make. Temporary ticket files are private and removed after the merge; key values are not passed on the command line or printed.
+Allow about **40 GB free for a fresh update build**, or **19 GB extra** when the base data is already cached, with the app on the same APFS volume. The merge reads the base NCA through a bounded range of the original container, temporarily extracts the much smaller update NCA, and verifies every IVFC level. It builds the local pinned [hactool](https://github.com/SciresM/hactool) snapshot with clang/make, without fetching it. Temporary ticket files are private and removed after the merge; key values are not passed on the command line or printed.
 
 If replacing a Mac app fails while it is signed or moved, the build puts the installed app and its reused game data back before it reports the error (if that fails too, the error names the folders to recover).
 
@@ -305,8 +309,8 @@ Recorded performance experiments, remaining work and comparison methods: [Mac pe
 
 - **[d2r-mobile](https://github.com/jhaizhou-ops/d2r-mobile)** (MIT) developed this way of running Switch games natively (for Diablo II: Resurrected): the NSO rewriter, the Horizon host and the NVN-on-Metal layer here started as its generic parts.
 - **[nxnative](https://github.com/seedds/nxnative)**: the one-script packaging and NSP common-ticket import follow its approach.
-- **Ryujinx** (MIT): its shader translator (`vendor/ryujinx`) turns the game's Maxwell shaders into SPIR-V, and its system-service code is a reference. With this project's patches and service it is compiled ahead of time (.NET NativeAOT) into `games/totk/prebuilt/macos-arm64/totk_xlate`; `games/totk/tools/totk_xlate/publish_native.sh` rebuilds it (needs the .NET 10 SDK, only for developers).
-- **[SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross)** (Apache-2.0) turns SPIR-V into Metal Shading Language; it is fetched at a pinned commit and compiled with clang during the build.
+- **Ryujinx** (MIT): its shader translator (`vendor/ryujinx`) turns the game's Maxwell shaders into SPIR-V, and its system-service code is a reference. With this project's patches and service it is compiled ahead of time (.NET NativeAOT) into `build-artifacts/translator-offline/native/totk_xlate`; `games/totk/tools/totk_xlate/publish_native.sh` rebuilds it offline using the pinned Homebrew toolchain and vendored NuGet packages in [`dependencies/dotnet`](dependencies/dotnet/README.md) (build it first with `just build-translator`).
+- **[SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross)** (Apache-2.0) turns SPIR-V into Metal Shading Language; its pinned snapshot is included in `dependencies/sources/SPIRV-Cross` and compiled with clang during the build.
 - **deko3d** (zlib): texture layout sizes. **bcdec**: BC texture decoding. **libopus** and **libvpx** (BSD) from Homebrew: audio and the pre-rendered movies.
 
 ## License
@@ -397,7 +401,7 @@ MIT (see [LICENSE](LICENSE)). Third-party code keeps its own license: [THIRD_PAR
 
 ## 打包 App
 
-**1. 工具**（只需一次）：Xcode 命令行工具和 [Homebrew](https://brew.sh)。安装构建依赖和获取固定版本源码需要联网：
+**1. 工具**（只需一次）：Xcode 命令行工具和 [Homebrew](https://brew.sh)。安装这些系统工具需要联网；App 构建本身使用本地离线依赖：
 
 ```sh
 xcode-select --install
@@ -411,6 +415,10 @@ brew install xcodegen cmake ninja
 ```
 
 可选：装有 Xcode 的 Metal 工具链（`xcodebuild -downloadComponent MetalToolchain`）时，构建会把启动着色器预先编译进 App。Xcode 不在 `/Applications` 也能找到（放在其他卷上，或设置 `DEVELOPER_DIR`）。没有它时，构建会改为把它们编进本机 Metal 缓存里属于 App 所在位置的那一份，这份缓存不跟着 App 走：挪动 App 之后，第一次启动会重新编译。
+
+**离线依赖：** 此副本的 [`dependencies/`](dependencies/README.md) 已包含固定版本源码和全部 Python wheel。构建会验证本地文件，缺失时直接报错，不会联网获取。请保留该目录；下载脚本 `tools/download_dependencies.py` 已停用，构建链接的 Homebrew 库按版本和 SHA-256 固定在 `dependencies/homebrew-pins.json`（`just verify-pins`）。wheel 适用于 Apple 芯片 Mac 的 Python **3.14**。
+
+**从源码构建着色器翻译器：** 首次构建 App 前先运行 `just build-translator`，修改翻译器源码后再次运行。`build_app.py` 只使用并验证 `build-artifacts/translator-offline/native/totk_xlate`，不会回退到旧的预编译程序。之后运行 `just build-totk` 或下方 Python 命令。
 
 **2. 下载或克隆本仓库**，在终端中进入 `MacNativeGames` 目录，再运行脚本，给出游戏文件和密钥：
 
@@ -434,9 +442,9 @@ python3.14 build_app.py ~/Games/totk.nsp -k ~/keys/prod.keys --shared-fonts /pat
 python3.14 build_app.py ~/Games/totk.xci -k ~/keys/prod.keys --platform ios -o ~/Games/TOTK.ipa
 ```
 
-构建更新版时添加 `--update ~/Games/1.4.3.nsp`；本体为 NSP 时也要继续提供 `--firmware` 或 `--shared-fonts`。首次 iOS 构建会下载并编译适用于设备的 Opus 和 libvpx，并为 iOS 编译着色器种子，因此需要联网和较多临时磁盘空间（全新本体构建建议至少预留 **45 GB**，全新本体加更新包建议预留 **60 GB**）。生成的 IPA 未签名，需使用侧载工具签名和安装，签名时要保留它的权限（它用到提高内存上限）。也可以让 Xcode 用你自己的 Apple ID 签名（Xcode › Settings › Accounts，免费的 Personal Team 即可），并安装到用数据线连接的 iPhone / iPad：`python3.14 games/totk/ios/tools/install_device.py ~/Games/TOTK.ipa --device "<设备名>"`。免费 Apple ID 的签名有效 7 天，付费会员一年；到期前再运行同一条命令续签，存档会保留。也可以加 `--ios-game-data documents -o ~/Games/TOTK.app`：17 GB 的游戏数据和启动着色器（输出在 App 旁边的 `TOTK-shader-seed` 文件夹）都不打进 App，由 `install_device.py ~/Games/TOTK.app --device "<设备名>" --game-data <打包工作目录>/totk/extracted/v143/romfs/romfs.bin` 传进 App 的文稿目录（游戏数据只传一次，着色器在内容变了时才传，手机上已有同一份时自动跳过），之后每次重新打包和安装只要几分钟。需要 iOS / iPadOS 26，最低支持 iPhone 14。实测情况见 [iPhone 和 iPad](#iphone-和-ipad)。
+构建更新版时添加 `--update ~/Games/1.4.3.nsp`；本体为 NSP 时也要继续提供 `--firmware` 或 `--shared-fonts`。首次 iOS 构建会从本地源码编译适用于设备的 Opus 和 libvpx，并为 iOS 编译着色器种子，因此需要较多临时磁盘空间，但不下载依赖（全新本体构建建议至少预留 **45 GB**，全新本体加更新包建议预留 **60 GB**）。生成的 IPA 未签名，需使用侧载工具签名和安装，签名时要保留它的权限（它用到提高内存上限）。也可以让 Xcode 用你自己的 Apple ID 签名（Xcode › Settings › Accounts，免费的 Personal Team 即可），并安装到用数据线连接的 iPhone / iPad：`python3.14 games/totk/ios/tools/install_device.py ~/Games/TOTK.ipa --device "<设备名>"`。免费 Apple ID 的签名有效 7 天，付费会员一年；到期前再运行同一条命令续签，存档会保留。也可以加 `--ios-game-data documents -o ~/Games/TOTK.app`：17 GB 的游戏数据和启动着色器（输出在 App 旁边的 `TOTK-shader-seed` 文件夹）都不打进 App，由 `install_device.py ~/Games/TOTK.app --device "<设备名>" --game-data <打包工作目录>/totk/extracted/v143/romfs/romfs.bin` 传进 App 的文稿目录（游戏数据只传一次，着色器在内容变了时才传，手机上已有同一份时自动跳过），之后每次重新打包和安装只要几分钟。需要 iOS / iPadOS 26，最低支持 iPhone 14。实测情况见 [iPhone 和 iPad](#iphone-和-ipad)。
 
-不使用 `-o` 时，选定的平台成品会放在游戏文件旁边（Mac 为 `Tears of the Kingdom.app`，iOS 为 `Tears of the Kingdom.ipa`）。加入完整着色器准备前，本地一次本体 1.0.0 Mac 全新构建在 M4 Mac mini 上约 6 分钟（这不是当前构建的耗时预估；耗时受硬件、磁盘和网络影响）：改写主代码模块、解密 17 GB 的游戏数据各约 1 分钟，macOS 把做好的 App 检查一遍要 2–3 分钟。现在的打包还会准备启动着色器（1.4.3 在 M4 上约 3 分钟），再为本机 GPU 编译全部准备好的着色器（1.4.3 在 M4 Max 上约 12 分钟；8 GB 内存的 M1 MacBook Air 在这一步内存不够、要用交换空间，更久；没有 Metal 工具链时，有游戏开着会跳过这一步，并提示）。Mac 打包不需要 .NET 或 CMake，做好的游戏运行时也不需要 Python：着色器翻译器是本仓库自带的原生程序（`games/totk/prebuilt`）。所有中间文件都在游戏文件旁边的工作目录里（`TOTK_build`，或用 `--work` 指定），再运行一次会复用已经做好的部分。
+不使用 `-o` 时，选定的平台成品会放在游戏文件旁边（Mac 为 `Tears of the Kingdom.app`，iOS 为 `Tears of the Kingdom.ipa`）。加入完整着色器准备前，本地一次本体 1.0.0 Mac 全新构建在 M4 Mac mini 上约 6 分钟（这不是当前构建的耗时预估；耗时受硬件、磁盘和网络影响）：改写主代码模块、解密 17 GB 的游戏数据各约 1 分钟，macOS 把做好的 App 检查一遍要 2–3 分钟。现在的打包还会准备启动着色器（1.4.3 在 M4 上约 3 分钟），再为本机 GPU 编译全部准备好的着色器（1.4.3 在 M4 Max 上约 12 分钟；8 GB 内存的 M1 MacBook Air 在这一步内存不够、要用交换空间，更久；没有 Metal 工具链时，有游戏开着会跳过这一步，并提示）。Mac 打包不需要 CMake；先构建翻译器需要固定版本的 Homebrew .NET 工具链。游戏运行时不需要 Python 或 .NET 运行时：翻译器使用 `build-artifacts/translator-offline/native` 中的本地源码构建版本，仍依赖 Homebrew OpenSSL/Brotli 动态库。所有中间文件都在游戏文件旁边的工作目录里（`TOTK_build`，或用 `--work` 指定），再运行一次会复用已经做好的部分。
 
 提取的程序模块、改写后的模块、RomFS 和共享字体会与所选版本的 `games/totk/assets/expected-v1.0.0.json`、`expected-v1.1.2.json`、`expected-v1.2.1.json` 或 `expected-v1.4.3.json` 中的哈希核对；预编译着色器翻译器另有 SHA-256 校验。不匹配时停止构建，但有一个例外：同一版本的另一份真实零售转储会被接受——它的 `main.npdm` 改用任天堂的 ACID 签名校验（`npdm_signed()`），而不是固定的哈希；其固件的共享字体则检查是否为有效的 BFTTF 结构，并按实际 SHA-256 绑定。密钥的值不会被打印。
 
@@ -461,7 +469,7 @@ python3.14 build_app.py ~/Games/totk.xci -k ~/keys/prod.keys --update ~/Games/1.
 
 无需另外下载 1.2.1 / 1.4.3 运行时表或着色器缓存。构建流程会根据你提供的游戏数据生成对应版本的运行时表和首启着色器种子，并将种子放进 App。仓库已包含各个支持的更新版的补丁代码和校验哈希；外部只需准备自己的本体、更新包和密钥。
 
-首次完整更新构建建议预留约 **40 GB**，已缓存本体数据时还需约 **19 GB** 空间，App 需放在同一 APFS 卷。合并时通过原始容器的限定区间读取本体 NCA，只临时提取较小的更新 NCA，并校验全部 IVFC 层；工具会获取固定提交的 [hactool](https://github.com/SciresM/hactool)，用 clang / make 编译。临时票据文件仅当前用户可读，合并结束即清理；密钥值不进入命令行或日志。
+首次完整更新构建建议预留约 **40 GB**，已缓存本体数据时还需约 **19 GB** 空间，App 需放在同一 APFS 卷。合并时通过原始容器的限定区间读取本体 NCA，只临时提取较小的更新 NCA，并校验全部 IVFC 层；工具会从本地固定提交的 [hactool](https://github.com/SciresM/hactool) 源码用 clang / make 编译，不联网获取。临时票据文件仅当前用户可读，合并结束即清理；密钥值不进入命令行或日志。
 
 存档继续保存在原 profile 目录。首次启动更新版前，App 会在旁边完整备份为 `profile-before-1.1.2`、`profile-before-1.2.1` 或 `profile-before-1.4.3`；备份失败就不启动。需要回退旧版本时保留并使用这份备份，不能假定新版存档向下兼容。
 
@@ -602,8 +610,8 @@ mouse_middle = zl
 
 - **[d2r-mobile](https://github.com/jhaizhou-ops/d2r-mobile)**（MIT）为《暗黑破坏神 II：狱火重生》开发了这套原生运行 Switch 游戏的方法：这里的 NSO 改写器、Horizon 宿主和 Metal 上的 NVN 层都从它的通用部分起步。
 - **[nxnative](https://github.com/seedds/nxnative)**：“用户自己的游戏文件 + 一个脚本出包”和 NSP 通用票据读取的做法借鉴自它；本项目只构建 Mac App。
-- **Ryujinx**（MIT）：它的着色器翻译器（`vendor/ryujinx`）把游戏的 Maxwell 着色器转成 SPIR-V，它的系统服务代码也是参考。加上本项目的补丁和着色器服务，用 .NET NativeAOT 预先编成原生程序 `games/totk/prebuilt/macos-arm64/totk_xlate`；改了翻译器用 `games/totk/tools/totk_xlate/publish_native.sh` 重编（要 .NET 10 SDK，只有开发者需要）。
-- **[SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross)**（Apache-2.0）把 SPIR-V 转成 Metal 着色语言；打包时按固定提交取得，用 clang 编。
+- **Ryujinx**（MIT）：它的着色器翻译器（`vendor/ryujinx`）把游戏的 Maxwell 着色器转成 SPIR-V，它的系统服务代码也是参考。加上本项目的补丁和着色器服务，用 .NET NativeAOT 预先编成原生程序 `build-artifacts/translator-offline/native/totk_xlate`；改了翻译器用 `games/totk/tools/totk_xlate/publish_native.sh` 重编（使用固定版本的 Homebrew 工具链和 [`dependencies/dotnet`](dependencies/dotnet/README.md) 中的本地 NuGet 包，离线构建；先运行 `just build-translator`）。
+- **[SPIRV-Cross](https://github.com/KhronosGroup/SPIRV-Cross)**（Apache-2.0）把 SPIR-V 转成 Metal 着色语言；固定提交的源码已包含在 `dependencies/sources/SPIRV-Cross`，打包时用 clang 编，不联网获取。
 - **deko3d**（zlib）：贴图布局尺寸。**bcdec**：BC 贴图解码。**libopus**、**libvpx**（BSD，来自 Homebrew）：音频和预渲染影片。
 
 ## 许可证

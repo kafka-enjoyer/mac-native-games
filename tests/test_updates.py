@@ -260,7 +260,7 @@ class Updates(unittest.TestCase):
             with self.subTest(version=version):
                 tree=self.root/version;out=self.root/f'{version}.app'
                 files=[f'build/totk-native-{version}','build/pso_manifest.tsv','build/pso_title.tsv','build/spirv-cross/spirv-cross',
-                       'prebuilt/macos-arm64/totk_xlate','build/app-launcher',f'extracted/{version}/romfs/romfs.bin',
+                       'build/shader-service/totk_xlate','build/app-launcher',f'extracted/{version}/romfs/romfs.bin',
                        f'extracted/{version}/romfs/runtime-index.bin',
                        f'build/shader-seed/{version}/seed-manifest.json',
                        f'build/shader-seed/{version}/pso_manifest.tsv']+[f'rewritten/{version}/{n}.patched.bin' for n in ('main','sdk','subsdk0')]
@@ -283,6 +283,7 @@ class Updates(unittest.TestCase):
                 self.assertTrue((res/f'rewritten/{version}/main.patched.bin').exists())
                 self.assertTrue((res/'build/shader-seed/seed-manifest.json').exists())
                 self.assertTrue((res/'build/pso_title.tsv').exists())   # the list the first frame waits for
+                self.assertEqual((res / build_app.STAGED_TRANSLATOR).read_bytes(), b'test')
                 self.assertEqual([p.name for p in (res/'rewritten').iterdir()], [version])
 
     def test_failed_bundle_seal_preserves_previous_app(self):

@@ -1,0 +1,6 @@
+dotnet 10.0.402
+openssl@4 4.0.3
+brotli 1.2.0
+Xcode 27.0
+Build version 27A266a
+Apple clang version 21.0.0 (clang-2100.3.34.2)
