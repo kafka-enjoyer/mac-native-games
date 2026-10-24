@@ -10,7 +10,7 @@ import shutil
 import subprocess
 import sys
 
-BUNDLE_ID = 'org.macnativegames.totk'
+BUNDLE_ID = 'org.mng.totk'
 LSREGISTER = '/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister'
 
 

@@ -27,7 +27,7 @@ CHECK_EVERY = 10 * 60          # the LaunchAgent's interval
 PULL_EVERY = 30 * 60           # one copy per device at most this often
 ISSUE_URL = 'https://github.com/ly05010419/MacNativeGames/issues/new?template=shader-list.yml'
 APP_NAME = 'Tears of the Kingdom'
-LABEL = 'org.macnativegames.totk.ios-shader-contrib'
+LABEL = 'org.mng.totk.ios-shader-contrib'
 DATA = Path.home() / 'Library/Application Support/MacNativeGames/TOTK'
 WORK = DATA / 'ios-contributions'   # each device's copy by UDID and its reminder state (hidden: players do not need them)
 STORE = WORK                        # main: --store, normally <clone>/shader-list-contribution, holding the one file players send

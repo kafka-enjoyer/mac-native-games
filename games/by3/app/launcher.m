@@ -1,6 +1,6 @@
 /* Bayonetta 3 launcher: a settings window with presets, then the game.
    The app is a small bundle; the game's data stay in the work folder (BY3_build) named by Info.plist's BY3WorkFolder,
-   so nothing large is copied. Settings are saved at every change (org.macnativegames.by3) and shown again next time.
+   so nothing large is copied. Settings are saved at every change (org.mng.by3) and shown again next time.
    What each setting does in the runtime:
    - Frame rate: 30 = the game's own pacing (30 / 60 by scene); 60 = the 60 fps patch; 120 = the 60 fps patch on a 120 Hz
      present base (experimental: correct only if the game advances by real time, not by frames).

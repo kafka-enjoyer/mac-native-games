@@ -245,7 +245,7 @@ def push_seed(dev, bundle_id, seed):
         got.write_text(f'{folder}\n{fp}\n'); copy(got, 'shader-seed.txt')
 
 def built_bundle_id(ipa, team):
-    """The identifier build_app.py gave the app (org.macnativegames.totk, or .botw for Breath of the Wild); a .app folder
+    """The identifier build_app.py gave the app (org.mng.totk, or .botw for Breath of the Wild); a .app folder
     signed before carries it with the team suffix this script added."""
     try:
         if ipa.is_dir(): raw = (ipa/'Info.plist').read_bytes()
@@ -254,7 +254,7 @@ def built_bundle_id(ipa, team):
         bid = plistlib.loads(raw).get('CFBundleIdentifier', '')
     except (OSError, KeyError, zipfile.BadZipFile, plistlib.InvalidFileException): bid = ''
     bid = bid.removesuffix('.' + team.lower())
-    return bid if bid.startswith(('org.macnativegames.', 'org.mng.')) else 'org.macnativegames.totk'
+    return bid if bid.startswith('org.mng.') else 'org.mng.totk'
 
 def built_platform(ipa):
     """Choose signing from the app, so an iPad-compatible build on a Vision Pro still gets an iOS profile."""
@@ -269,7 +269,7 @@ def main():
     ap.add_argument('ipa', type=Path, help='the unsigned IPA (or .app folder) from build_app.py --platform ios or visionos')
     ap.add_argument('--device', help='device name (as in Finder) or identifier; needed when several are paired')
     ap.add_argument('--team', help='team ID of the dedicated signing Apple ID (default: $MNG_SIGNING_TEAM; required)')
-    ap.add_argument('--bundle-id', help='default: the build\'s identifier (org.macnativegames.totk or .botw) + .<team>, so it is free to register on your team')
+    ap.add_argument('--bundle-id', help='default: the build\'s identifier (org.mng.totk or .botw) + .<team>, so it is free to register on your team')
     ap.add_argument('--game-data', type=Path, help='romfs.bin (index.json beside it) for an IPA built with --ios-game-data documents')
     a = ap.parse_args()
     team = signing_team(a.team)

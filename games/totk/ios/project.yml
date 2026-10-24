@@ -1,6 +1,6 @@
 name: TOTKIOS
 options:
-  bundleIdPrefix: org.macnativegames
+  bundleIdPrefix: org.mng
   deploymentTarget:
     iOS: "26.0"
 configFiles:

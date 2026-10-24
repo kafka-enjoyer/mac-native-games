@@ -118,7 +118,7 @@ def main():
     ap = argparse.ArgumentParser(description='Translate the shaders an iOS device missed and push them back to it.')
     ap.add_argument('--tree', type=Path, required=True, help='prepared work tree (build/shader-service, build/spirv-cross)')
     ap.add_argument('--device', default=os.environ.get('TOTK_IOS_DEVICE'), help='devicectl device id (or TOTK_IOS_DEVICE)')
-    ap.add_argument('--bundle-id', default=os.environ.get('TOTK_BUNDLE_ID', 'org.macnativegames.totk'))
+    ap.add_argument('--bundle-id', default=os.environ.get('TOTK_BUNDLE_ID', 'org.mng.totk'))
     ap.add_argument('--requests', type=Path, help='use requests already copied from the device instead of pulling them')
     ap.add_argument('--no-push', action='store_true', help='translate and build the pack, but do not send it')
     ap.add_argument('--with-done', action='store_true', help='also rebuild the variants filled before (shader-requests/done),'

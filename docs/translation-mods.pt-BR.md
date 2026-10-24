@@ -34,10 +34,10 @@ voz em `Voice/Resource/USen`). O jogo segue o idioma do Mac, então, se o Mac n�
 texto do mod não aparece. Deixe só este jogo no idioma substituído:
 
 ```
-defaults write org.macnativegames.totk AppleLanguages -array en-US
+defaults write org.mng.totk AppleLanguages -array en-US
 ```
 
-`defaults delete org.macnativegames.totk AppleLanguages` volta para o idioma do Mac. Abrindo pelo Terminal,
+`defaults delete org.mng.totk AppleLanguages` volta para o idioma do Mac. Abrindo pelo Terminal,
 `TOTK_LANG=en-US` faz o mesmo numa execução.
 
 ## 4. O arquivo de interface e o patch do próprio build
@@ -63,7 +63,7 @@ Um mod que mudou ele mesmo os membros do patch é recusado, e nada é gravado. S
 
 ## 5. Conferir
 
-O log vem desligado: ligue com `defaults write org.macnativegames.totk TOTK_DEBUG_LOG -bool YES` e abra o jogo de novo. O
+O log vem desligado: ligue com `defaults write org.mng.totk TOTK_DEBUG_LOG -bool YES` e abra o jogo de novo. O
 log (`~/Library/Logs/MacNativeGames/totk.log`) então mostra o mod ao abrir:
 
 ```

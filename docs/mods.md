@@ -256,7 +256,7 @@ Check `grep "mods/botw160 checked" ~/Library/Logs/MacNativeGames/botw.log | tail
   size and stops at start (for example a translation whose `Pack/Bootup_<lang>.pack` grew).
 - The game's language follows the app's preferred language, which also picks the language folder a mod must use (`USen` for
   `en-US`). To give only this game another language:
-  `defaults write org.macnativegames.botw AppleLanguages -array en-US`.
+  `defaults write org.mng.botw AppleLanguages -array en-US`.
 
 ### Notes
 
@@ -298,7 +298,7 @@ Check `grep "mods/botw160 checked" ~/Library/Logs/MacNativeGames/botw.log | tail
 
 The game closes the window and writes one line to `~/Library/Logs/MacNativeGames/totk.log` instead of starting with data
 it cannot trust. The line above it names the file. The log is off by default: turn it on with
-`defaults write org.macnativegames.totk TOTK_DEBUG_LOG -bool YES` (`org.macnativegames.botw` for Breath of the Wild) and start
+`defaults write org.mng.totk TOTK_DEBUG_LOG -bool YES` (`org.mng.botw` for Breath of the Wild) and start
 the game again. The `grep` checks on this page need it too.
 
 - `two overlays replace the same file` - the manifest lists a path the app replaces itself: a manifest written by hand
@@ -538,7 +538,7 @@ python3 games/totk/scripts/make_mod_manifest.py "$MODDIR" --app "/path/to/Breath
   `System/Resource/ResourceSizeTable.product.srsizetable`。没有它游戏会按原版大小分配，启动时就会停止（例如
   `Pack/Bootup_<语言>.pack` 变大的翻译 mod）。
 - 游戏语言跟随 App 的首选语言，也由它决定 mod 要放在哪个语言目录（`en-US` 对应 `USen`）。只给这个游戏换语言：
-  `defaults write org.macnativegames.botw AppleLanguages -array en-US`。
+  `defaults write org.mng.botw AppleLanguages -array en-US`。
 
 ### 注意
 
@@ -570,7 +570,7 @@ python3 games/totk/scripts/make_mod_manifest.py "$MODDIR" --app "/path/to/Breath
 
 ### 启动停止时
 
-游戏会关掉窗口，并在 `~/Library/Logs/MacNativeGames/totk.log` 写下最后一行原因，它上面一行就是出问题的文件。日志默认关闭：先用 `defaults write org.macnativegames.totk TOTK_DEBUG_LOG -bool YES`（旷野之息是 `org.macnativegames.botw`）打开，再启动一次。本页的 `grep` 检查也需要先打开日志。
+游戏会关掉窗口，并在 `~/Library/Logs/MacNativeGames/totk.log` 写下最后一行原因，它上面一行就是出问题的文件。日志默认关闭：先用 `defaults write org.mng.totk TOTK_DEBUG_LOG -bool YES`（旷野之息是 `org.mng.botw`）打开，再启动一次。本页的 `grep` 检查也需要先打开日志。
 
 - `two overlays replace the same file`：清单里列了 App 自己也会替换的路径——通常是手工写的清单或别的工具写的清单（UI 归档
   的情况会改成合并而不是排除），

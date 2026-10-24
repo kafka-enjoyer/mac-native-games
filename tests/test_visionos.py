@@ -64,7 +64,7 @@ class VisionOS(unittest.TestCase):
                 patch.object(install_device, 'run'), patch.object(install_device.subprocess, 'run') as run:
             run.return_value.returncode = 0
             for platform, sdk in [('ios', 'iphoneos'), ('visionos', 'xros')]:
-                prov, app = install_device.profile('TEAM', 'org.macnativegames.totk', 'DEVICE', platform)
+                prov, app = install_device.profile('TEAM', 'org.mng.totk', 'DEVICE', platform)
                 project = app.parents[4]/'project.yml'
                 self.assertIn('platform: '+('visionOS' if sdk == 'xros' else 'iOS'), project.read_text())
                 self.assertEqual(app.parent.name, 'Debug-'+sdk)

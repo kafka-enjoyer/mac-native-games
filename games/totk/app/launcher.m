@@ -255,7 +255,7 @@ int main(int argc, char **argv) {
         /* Player mods (runtime/romfs.c): <data>/mods/<version>/manifest.tsv, when present. */
         setenv("TOTK_ROMFS_MODS", [data stringByAppendingPathComponent:@"mods/" TOTK_GAME_DIR].fileSystemRepresentation, 0);
         /* The game's language (runtime/services.c): the app's first preferred language, which also follows a per-app
-           language (defaults write org.macnativegames.totk AppleLanguages -array pt-BR). TOTK_LANG still overrides it. */
+           language (defaults write org.mng.totk AppleLanguages -array pt-BR). TOTK_LANG still overrides it. */
         NSString *preferred = NSLocale.preferredLanguages.firstObject;
         if (preferred) setenv("TOTK_LOCALE", preferred.UTF8String, 1);
         setenv("TOTK_GPU_ALLOW_SUBMIT", "1", 1);
@@ -278,8 +278,8 @@ int main(int argc, char **argv) {
           FILE *cf = fopen(cmds.fileSystemRepresentation, "w"); if (cf) fclose(cf);
           setenv("TOTK_INPUT_FILE", cmds.fileSystemRepresentation, 1); }
 
-        /* The log is written only with debug on, as on the iPhone: defaults write org.macnativegames.totk TOTK_DEBUG_LOG
-           -bool YES (org.macnativegames.botw for Breath of the Wild), or TOTK_DEBUG_LOG=1 in the environment, which wins
+        /* The log is written only with debug on, as on the iPhone: defaults write org.mng.totk TOTK_DEBUG_LOG
+           -bool YES (org.mng.botw for Breath of the Wild), or TOTK_DEBUG_LOG=1 in the environment, which wins
            (the test tools pass it). Off, the game's output goes to /dev/null and the logs of earlier runs are removed. */
         const char *debugEnv = getenv("TOTK_DEBUG_LOG");
         BOOL debugLog = debugEnv ? (*debugEnv && strcmp(debugEnv, "0")) : [NSUserDefaults.standardUserDefaults boolForKey:@"TOTK_DEBUG_LOG"];

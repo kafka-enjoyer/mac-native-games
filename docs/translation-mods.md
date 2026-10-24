@@ -35,10 +35,10 @@ A translation usually replaces one of the game's languages, most often American 
 the mod replaces, the mod's text does not show. Give only this game the replaced language:
 
 ```
-defaults write org.macnativegames.totk AppleLanguages -array en-US
+defaults write org.mng.totk AppleLanguages -array en-US
 ```
 
-`defaults delete org.macnativegames.totk AppleLanguages` goes back to the Mac's language. Started from Terminal,
+`defaults delete org.mng.totk AppleLanguages` goes back to the Mac's language. Started from Terminal,
 `TOTK_LANG=en-US` does the same for one run.
 
 ## 4. The UI archive and the build's own patch
@@ -64,7 +64,7 @@ run `make_mod_manifest.py` again (the start says which file no longer matches).
 
 ## 5. Check
 
-The log is off by default: turn it on with `defaults write org.macnativegames.totk TOTK_DEBUG_LOG -bool YES` and start the
+The log is off by default: turn it on with `defaults write org.mng.totk TOTK_DEBUG_LOG -bool YES` and start the
 game again. The log (`~/Library/Logs/MacNativeGames/totk.log`) then lists the mod at start:
 
 ```

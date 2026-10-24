@@ -69,7 +69,7 @@ VERSIONS['botw190'] = BOTW190
 TITLES = {'0100F2C0115B6000': 'totk', '01007EF00011E000': 'botw'}
 # Per game: app name, bundle identifier, executable name (= the player's data folder under
 # ~/Library/Application Support/MacNativeGames, games/totk/runtime/game_version.h GAME_FOLDER)
-APPS = {'totk': ('Tears of the Kingdom', 'org.macnativegames.totk', 'TOTK'), 'botw': ('Breath of the Wild', 'org.macnativegames.botw', 'BotW')}
+APPS = {'totk': ('Tears of the Kingdom', 'org.mng.totk', 'TOTK'), 'botw': ('Breath of the Wild', 'org.mng.botw', 'BotW')}
 DEPENDENCIES = REPO / 'dependencies'
 SOURCE_TRANSLATOR = REPO / 'build-artifacts/translator-offline/native/totk_xlate'
 STAGED_TRANSLATOR = Path('build/shader-service/totk_xlate')

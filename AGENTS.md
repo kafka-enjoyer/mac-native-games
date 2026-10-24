@@ -34,6 +34,9 @@ This is an **offline-hardened fork** of [ly05010419/MacNativeGames](https://gith
    offline adaptations; a rebase drops them. Use `git pull --ff-only` or `--no-rebase`.
 9. **`games/awakening/` is developed by a separate agent on branch `awakening-poc`** (proof of concept). Do not edit
    it on `main`; the branch is merged into `main` only when the user asks (`merge: awakening-poc (<summary>)`).
+10. **Identifiers use `org.mng`, never `org.macnativegames`.** Bundle IDs, data-bundle IDs, `defaults` domains,
+    LaunchAgent labels and docs: `org.mng.<game>` (`org.mng.totk`, `org.mng.botw`, `org.mng.odyssey`, `org.mng.by3`).
+    Upstream merges reintroduce `org.macnativegames`; rename it during conflict resolution.
 
 ## Directory structure
 
@@ -97,6 +100,7 @@ git fetch https://github.com/ly05010419/MacNativeGames.git main:refs/remotes/ups
 git log --oneline HEAD..upstream/main
 git diff HEAD...upstream/main | grep '^+' | grep -nE 'git (clone|fetch)|curl|wget|urlopen|pip.*install|FetchContent|brew install|https?://'
 git merge --no-ff --no-commit upstream/main
+git grep -n 'org\.macnativegames' -- . ':!games/awakening'   # must find nothing (rule 10)
 ```
 
 - Review every new commit for network access, new dependencies and new Homebrew links before merging.
@@ -114,4 +118,4 @@ git merge --no-ff --no-commit upstream/main
 - The managed translator build (`--managed`, `make shader-tools`) cannot link SPIRV-Cross; use
   `TOTK_XLATE_SPIRV_CROSS=process` with it.
 - BotW update `v1114112` is 1.9.0; firmware 23.0.1's shared fonts match the expected hashes.
-- The bundle identifier is `org.mng.totk` (changed from upstream's `org.macnativegames.totk`).
+- Identifiers are `org.mng.<game>` (rule 10); upstream uses `org.macnativegames.<game>`.

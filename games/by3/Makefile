@@ -94,7 +94,7 @@ app: runtime shader-tools $(OUT)/launcher $(OUT)/AppIcon.icns
 	  '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
 	  '<plist version="1.0"><dict>' \
 	  '<key>CFBundleExecutable</key><string>Bayonetta 3</string>' \
-	  '<key>CFBundleIdentifier</key><string>org.macnativegames.by3</string>' \
+	  '<key>CFBundleIdentifier</key><string>org.mng.by3</string>' \
 	  '<key>CFBundleName</key><string>Bayonetta 3</string>' \
 	  '<key>CFBundlePackageType</key><string>APPL</string>' \
 	  '<key>CFBundleShortVersionString</key><string>1.2.0</string>' \
