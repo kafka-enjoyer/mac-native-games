@@ -79,7 +79,7 @@ python3.14 build_app.py BASE.nsp --update UPDATE.nsp -k prod.keys --firmware FIR
       the firmware unzip shared with BotW.
 - [x] `AGENTS.md`, `games/odyssey/README.md`, `third_party/COPIES.md` updated.
 - [x] `tests/test_odyssey_build.py`: combining base and update, version pins, no fetches, no `prebuilt/`, dispatch
-      checks, app identity and data folder, no `org.macnativegames`.
+      checks, app identity and data folder, only `org.mng` identifiers.
 
 **Verified:** `sandbox-exec` (networking denied) `just build odyssey` from an empty work folder in 7 minutes: 28,131
 seed shaders from the source-built translator; app signature valid; `CFBundleIdentifier` `org.mng.odyssey`. Repo tests
