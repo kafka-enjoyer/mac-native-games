@@ -114,6 +114,14 @@ git grep -n 'org\.macnativegames' -- . ':!games/awakening'   # must find nothing
   `git clone`, no `prebuilt/` translator, `org.mng.odyssey`, data in `~/Library/Application Support/MacNativeGames/Odyssey`,
   no session limit (`tests/test_odyssey_build.py` checks these).
 
+## Known issues
+
+Per game; observed by the user, not yet debugged. Remove an entry once it is fixed and verified.
+
+| Game | Version / platform | Issue | Status |
+|---|---|---|---|
+| Super Mario Odyssey | 1.4.1, Mac (first build from base + update, 2026-10-23) | Occasional graphical flicker and stutters during play; otherwise runs | open, to be debugged in a later update (see `games/odyssey/SHADER_STUTTER.md`, `HITCHES_AND_LATENCY.md` for earlier analysis) |
+
 ## Gotchas
 
 - `build_app.py` takes `-o/--out` (not `--output`) and puts its work folder **next to the game file** unless `--work`
