@@ -171,7 +171,11 @@ class Patched:
         plain = upper_iv(gen0, self.secure)
         ex_rows, ex_total = bucket_tree(lambda o, n: ctr.read(start + ex_off + o, n, plain), ex_size,
                                         fs[0x130:0x140], 0x10, ctr_ex_row)
-        require(ex_total == ex_off, 'AES-CTR-Ex table must cover the section up to itself')
+        # Two layouts: the table covers the indirect table too (Bayonetta 3, Odyssey 1.3.0), or stops where the indirect
+        # table starts (Odyssey 1.4.1, 2026-10-23), which is then plain AES-CTR with the section's own generation.
+        require(ex_total in (ex_off, ind_off), 'AES-CTR-Ex table must cover the section up to itself or the indirect table')
+        if ex_total == ind_off:
+            ex_rows.append((ind_off, ex_off, 0, gen0))
         self.ctr, self.start, self.base, self.ex = ctr, start, base, Ranges(ex_rows)
         ind_rows, total = bucket_tree(lambda o, n: self.update_data(ind_off + o, n), ind_size,
                                       fs[0x110:0x120], 0x14, indirect_row)

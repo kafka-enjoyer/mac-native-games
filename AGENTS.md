@@ -5,7 +5,7 @@ emulation, picture quality) are in [CONTRIBUTING.md](CONTRIBUTING.md). Read it t
 
 ## Overview
 
-Native Apple-silicon ports of Nintendo Switch games (Tears of the Kingdom, Breath of the Wild; others in progress). The
+Native Apple-silicon ports of Nintendo Switch games (Tears of the Kingdom, Breath of the Wild, Super Mario Odyssey; others in progress). The
 game's own ARM64 code is rewritten ahead of time and runs natively; NVN graphics run on Metal. `build_app.py` builds a
 macOS `.app` or an unsigned iOS / visionOS `.ipa` from the user's own game dumps.
 
@@ -45,7 +45,8 @@ This is an **offline-hardened fork** of [ly05010419/MacNativeGames](https://gith
 | `build_app.py` | The builder: extract, rewrite, shaders, package (`--platform macos\|ios\|visionos`) | tracked |
 | `games/totk/` | Shared TOTK + BotW runtime (`runtime/`), NVN-on-Metal (`third_party/d2r_gfx`), rewriter, scripts, iOS project (`ios/`), translator sources (`tools/totk_xlate`), `Makefile` | tracked |
 | `games/botw/` | BotW-specific assets, scripts, expected hashes | tracked |
-| `games/odyssey/`, `games/by3/` | Other ports; each carries its own copies (see CONTRIBUTING) | tracked |
+| `games/odyssey/` | Super Mario Odyssey: own runtime, Makefile and builder (`scripts/build_odyssey.py`), called by `build_app.py` after the shared offline checks; plan in `BUILD_ALIGNMENT.md` | tracked |
+| `games/by3/` | Bayonetta 3; carries its own copies (see CONTRIBUTING) | tracked |
 | `games/awakening/` | Link's Awakening proof of concept (notes so far), developed on `awakening-poc` (rule 9) | tracked |
 | `vendor/ryujinx/` | Ryujinx shader translator sources (patched at build) | tracked |
 | `tools/` | `homebrew_pins.py` (pin check/update), disabled `download_dependencies.py` | tracked |
@@ -63,7 +64,7 @@ Run `just --list`. Defaults: `game=totk`, `platform=mac`. Paths are just variabl
 
 | Recipe | What it does |
 |---|---|
-| `just build [totk\|botw] [mac\|ios\|visionos]` | Build from `dumps/` into `dist/<game>/<platform>/`, work folder `build-artifacts/work/<game>` (shared across platforms). Device builds pass `--no-shader-reminder`. BotW builds 1.9.0 (base + update + both DLC + firmware fonts); visionOS is TOTK only |
+| `just build [totk\|botw\|odyssey] [mac\|ios\|visionos]` | Build from `dumps/` into `dist/<game>/<platform>/`, work folder `build-artifacts/work/<game>` (shared across platforms). Device builds pass `--no-shader-reminder`. BotW builds 1.9.0 (base + update + both DLC + firmware fonts); Odyssey builds 1.4.1 (base + update + firmware fonts), Mac only; visionOS is TOTK only |
 | `just install "<device>" [game] [ios\|visionos]` | Sign with the dedicated Apple ID (`.signing.env`) and install |
 | `just clean [game\|all] [platform\|all]` | Remove releases only |
 | `just clean-work [game\|all]` | Remove work folders (next build starts from scratch) |
@@ -108,6 +109,10 @@ git grep -n 'org\.macnativegames' -- . ':!games/awakening'   # must find nothing
   dedicated signing). Upstream regularly reintroduces fetches (e.g. SPIRV-Cross in `publish_native.sh`); adapt them to
   `dependencies/` via `build_app.local_source()`.
 - Translator sources changed → `just build-translator`. Then run the tests, commit, and push `main` only when asked.
+- Upstream Odyssey changes (`games/odyssey/scripts/build_odyssey.py`, `Makefile`, `package_native_app.py`, the
+  launcher) conflict with the fork's alignment: keep `--update`/`--out`/`--translator`/`--spirv-cross-src`, no
+  `git clone`, no `prebuilt/` translator, `org.mng.odyssey`, data in `~/Library/Application Support/MacNativeGames/Odyssey`,
+  no session limit (`tests/test_odyssey_build.py` checks these).
 
 ## Gotchas
 
@@ -118,4 +123,7 @@ git grep -n 'org\.macnativegames' -- . ':!games/awakening'   # must find nothing
 - The managed translator build (`--managed`, `make shader-tools`) cannot link SPIRV-Cross; use
   `TOTK_XLATE_SPIRV_CROSS=process` with it.
 - BotW update `v1114112` is 1.9.0; firmware 23.0.1's shared fonts match the expected hashes.
+- Odyssey update `v393216` is 1.4.1: same code and merged RomFS as 1.3.0 (`games/odyssey/assets/expected-*.json`). The
+  Odyssey builder works in `<work>/odyssey/v<version>/` and combines base + update into `<work>/odyssey/input/combined.nsp`
+  (6 GB, removed after a successful build). It uses the shared source-built translator, never `games/odyssey/prebuilt/`.
 - Identifiers are `org.mng.<game>` (rule 10); upstream uses `org.macnativegames.<game>`.

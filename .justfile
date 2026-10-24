@@ -3,6 +3,7 @@
 #   just build totk ios           Tears of the Kingdom IPA (iPhone / iPad)
 #   just build totk visionos      Tears of the Kingdom IPA (Vision Pro)
 #   just build botw               Breath of the Wild 1.9.0 for the Mac (base + update + both DLC packs)
+#   just build odyssey            Super Mario Odyssey 1.4.1 for the Mac (base + update; Mac only)
 #   just install "My iPhone"      sign with the dedicated Apple ID (.signing.env) and install
 #   just clean / just clean-work  remove releases / work folders (saves and caches in ~/Library are kept)
 # Any path below can be overridden: just totk-update=dumps/totk/other.nsp build
@@ -32,14 +33,19 @@ botw-dlc2 := dumps / "botw/botw-dlc-pack2-v196608.nsp"
 firmware-zip := dumps / "firmware/Firmware.23.0.1.zip"
 firmware := dumps / "firmware/23.0.1"
 
-# Build a game: game = totk | botw, platform = mac | ios | visionos. iOS / visionOS builds are unsigned IPAs.
+# Super Mario Odyssey: base NSP + the 1.4.1 update (version 393216; 1.3.0 works too) + the unpacked firmware for the
+# shared fonts. Mac only.
+odyssey-game := dumps / "odyssey/odyssey-base-v0.nsp"
+odyssey-update := dumps / "odyssey/odyssey-update-v393216.nsp"
+
+# Build a game: game = totk | botw | odyssey, platform = mac | ios | visionos. iOS / visionOS builds are unsigned IPAs.
 build game="totk" platform="mac":
     #!/usr/bin/env bash
     set -euo pipefail
     resolved=$({{quote(just_executable())}} --justfile {{quote(justfile())}} _resolve {{quote(game)}} {{quote(platform)}})   # fails here on a bad choice
     eval "$resolved"
     for input in "${required[@]}"; do [[ -e "$input" ]] || { echo "missing input: $input" >&2; exit 1; }; done
-    if [[ {{quote(game)}} == botw && ! -d {{quote(firmware)}} ]]; then
+    if [[ ( {{quote(game)}} == botw || {{quote(game)}} == odyssey ) && ! -d {{quote(firmware)}} ]]; then
         echo "unpacking the firmware for the shared fonts (local, once): {{firmware}}"
         mkdir -p {{quote(firmware)}} && unzip -q {{quote(firmware-zip)}} -d {{quote(firmware)}}
     fi
@@ -58,12 +64,12 @@ install device game="totk" platform="ios":
     [[ -f $out ]] || { echo "no build at $out: run just build {{game}} {{platform}}" >&2; exit 1; }
     {{python}} games/totk/ios/tools/install_device.py "$out" --device {{quote(device)}}
 
-# game = all | totk | botw, platform = all | mac | ios | visionos
+# game = all | totk | botw | odyssey, platform = all | mac | ios | visionos
 # Remove releases in dist/<game>/<platform> (app / IPA, .signed, partial outputs); saves and caches in ~/Library stay.
 clean game="all" platform="all":
     #!/usr/bin/env bash
     set -euo pipefail
-    case {{quote(game)}} in all) games=(totk botw);; totk|botw) games=({{quote(game)}});; *) echo "game: all | totk | botw" >&2; exit 2;; esac
+    case {{quote(game)}} in all) games=(totk botw odyssey);; totk|botw|odyssey) games=({{quote(game)}});; *) echo "game: all | totk | botw | odyssey" >&2; exit 2;; esac
     case {{quote(platform)}} in all) platforms=(mac ios visionos);; mac|ios|visionos) platforms=({{quote(platform)}});; *) echo "platform: all | mac | ios | visionos" >&2; exit 2;; esac
     for g in "${games[@]}"; do for p in "${platforms[@]}"; do
         if [[ -e "{{dist}}/$g/$p" ]]; then rm -rf -- "{{dist}}/$g/$p"; echo "removed {{dist}}/$g/$p"; fi
@@ -73,7 +79,7 @@ clean game="all" platform="all":
 clean-work game="all":
     #!/usr/bin/env bash
     set -euo pipefail
-    case {{quote(game)}} in all) games=(totk botw);; totk|botw) games=({{quote(game)}});; *) echo "game: all | totk | botw" >&2; exit 2;; esac
+    case {{quote(game)}} in all) games=(totk botw odyssey);; totk|botw|odyssey) games=({{quote(game)}});; *) echo "game: all | totk | botw | odyssey" >&2; exit 2;; esac
     for g in "${games[@]}"; do
         if [[ -e "{{work-root}}/$g" ]]; then rm -rf -- "{{work-root}}/$g"; echo "removed {{work-root}}/$g"; fi
     done
@@ -102,8 +108,14 @@ _resolve game platform:
         botw) app="Breath of the Wild"
               inputs=({{quote(botw-game)}} --update {{quote(botw-update)}} --dlc {{quote(botw-dlc1)}} --dlc {{quote(botw-dlc2)}} --firmware {{quote(firmware)}})
               required=({{quote(botw-game)}} {{quote(botw-update)}} {{quote(botw-dlc1)}} {{quote(botw-dlc2)}} {{quote(keys)}});;
-        *) echo "unknown game {{quote(game)}}: totk | botw" >&2; exit 2;;
+        odyssey) app="Super Mario Odyssey"
+              inputs=({{quote(odyssey-game)}} --update {{quote(odyssey-update)}} --firmware {{quote(firmware)}})
+              required=({{quote(odyssey-game)}} {{quote(odyssey-update)}} {{quote(keys)}});;
+        *) echo "unknown game {{quote(game)}}: totk | botw | odyssey" >&2; exit 2;;
     esac
+    if [[ {{quote(game)}} == odyssey && {{quote(platform)}} != mac ]]; then
+        echo "Super Mario Odyssey builds for the Mac only" >&2; exit 2
+    fi
     case {{quote(platform)}} in
         mac) flag=macos; ext=app; extra=();;
         ios) flag=ios; ext=ipa; extra=(--no-shader-reminder);;

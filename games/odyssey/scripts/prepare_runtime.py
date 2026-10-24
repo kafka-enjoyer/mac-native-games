@@ -11,11 +11,11 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(HERE.parent / 'by3/third_party/d2r'))
+sys.path.insert(0, str(HERE / 'third_party/d2r'))   # own copy (third_party/COPIES.md), never games/by3
 from relr import decode_relr
 
 VERSION = 'local'
-EXPECTED = json.loads((HERE / 'assets/expected-local-update.json').read_text())
+EXPECTED = json.loads((HERE / 'assets/expected-local-update.json').read_text())   # 1.3.0; --expected selects another
 
 
 def sha(path):
@@ -141,8 +141,14 @@ def runtime_tables(work, out):
 def romfs_config(work, out):
     folder = work / f'extracted/{VERSION}/romfs'
     manifest = json.loads((folder / 'index.json').read_text())
-    assert manifest['status'] == 'pass' and manifest['romfs_sha256'] == EXPECTED['romfs']['sha256']
-    assert (folder / 'romfs.bin').stat().st_size == manifest['romfs_size'] == EXPECTED['romfs']['size']
+    assert manifest['status'] == 'pass'
+    if EXPECTED['romfs']['sha256'] is None:   # a version whose merged RomFS is not pinned yet: IVFC-verified only
+        print(f'RomFS not pinned for this version; IVFC-verified image: size {manifest["romfs_size"]}, '
+              f'sha256 {manifest["romfs_sha256"]}', file=sys.stderr)
+    else:
+        assert manifest['romfs_sha256'] == EXPECTED['romfs']['sha256']
+        assert manifest['romfs_size'] == EXPECTED['romfs']['size']
+    assert (folder / 'romfs.bin').stat().st_size == manifest['romfs_size']
     strings, rows = bytearray(), bytearray()
     for item in manifest['files']:
         name = item['path'].encode() + b'\0'
@@ -179,7 +185,12 @@ def shared_fonts_config(work, out):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--work', type=Path, default=HERE / 'Odyssey_build')
-    work = parser.parse_args().work.resolve()
+    parser.add_argument('--expected', type=Path, help='expected-*.json of the update version (default: 1.3.0)')
+    args = parser.parse_args()
+    if args.expected:
+        EXPECTED.clear()
+        EXPECTED.update(json.loads(args.expected.read_text()))
+    work = args.work.resolve()
     out = work / 'build'
     out.mkdir(parents=True, exist_ok=True)
     runtime = runtime_tables(work, out)

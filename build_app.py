@@ -66,10 +66,14 @@ BOTW190 = json.loads((BOTW / 'assets/expected-v1.9.0.json').read_text())
 BOTW_LIST = BOTW / 'assets/shader_list.tsv'   # the game's shared shader list (docs/shader-list.md)
 VERSIONS['botw160'] = BOTW160
 VERSIONS['botw190'] = BOTW190
-TITLES = {'0100F2C0115B6000': 'totk', '01007EF00011E000': 'botw'}
+# Super Mario Odyssey (games/odyssey): its own runtime and builder (games/odyssey/scripts/build_odyssey.py), which this
+# file calls after the shared offline checks; base NSP/XCI + update 1.3.0 or 1.4.1 (games/odyssey/BUILD_ALIGNMENT.md).
+ODYSSEY = REPO / 'games/odyssey'
+TITLES = {'0100F2C0115B6000': 'totk', '01007EF00011E000': 'botw', '0100000000010000': 'odyssey'}
 # Per game: app name, bundle identifier, executable name (= the player's data folder under
 # ~/Library/Application Support/MacNativeGames, games/totk/runtime/game_version.h GAME_FOLDER)
-APPS = {'totk': ('Tears of the Kingdom', 'org.mng.totk', 'TOTK'), 'botw': ('Breath of the Wild', 'org.mng.botw', 'BotW')}
+APPS = {'totk': ('Tears of the Kingdom', 'org.mng.totk', 'TOTK'), 'botw': ('Breath of the Wild', 'org.mng.botw', 'BotW'),
+        'odyssey': ('Super Mario Odyssey', 'org.mng.odyssey', 'Odyssey')}
 DEPENDENCIES = REPO / 'dependencies'
 SOURCE_TRANSLATOR = REPO / 'build-artifacts/translator-offline/native/totk_xlate'
 STAGED_TRANSLATOR = Path('build/shader-service/totk_xlate')
@@ -1577,8 +1581,8 @@ def identify_game(tree, game, keys, logs):
                                  (': pass the base NSP as the game file with --update <update.nsp>, and this file with --dlc'
                                   if TITLES[application] == 'botw' else ', which this build does not support'))
     if len(found) != 1:
-        raise BuildError(f'the game file holds {report["titles"]}: expected Tears of the Kingdom (0100F2C0115B6000) or '
-                         f'Breath of the Wild (01007EF00011E000)')
+        raise BuildError(f'the game file holds {report["titles"]}: expected Tears of the Kingdom (0100F2C0115B6000), '
+                         f'Breath of the Wild (01007EF00011E000) or Super Mario Odyssey (0100000000010000)')
     return found[0]
 
 
@@ -1842,6 +1846,57 @@ def step_shaders_botw(tree, botw, logs, *, version='botw160'):
         logs / 'prepare-shader-seed-botw.log', cwd=tree)
 
 
+def build_odyssey(args, tree, game, update, keys, kind, firmware, shared_fonts, work, out, py, env, logs, t0, fresh_work):
+    """Super Mario Odyssey: the shared checks (Homebrew pins, local wheels, translator) have run; check the inputs the
+    same way as for the other games, then run games/odyssey/scripts/build_odyssey.py with the work folder's Python, the
+    hash-checked SPIRV-Cross copy and the staged source-built translator. Mac only; no DLC, mods or iOS."""
+    if args.platform != 'macos':
+        raise BuildError('Super Mario Odyssey has no iPhone / iPad / Vision Pro build yet: use --platform macos')
+    if args.mod or args.install_mod_romfs:
+        raise BuildError('--mod is not wired for Super Mario Odyssey')
+    if shared_fonts:
+        raise BuildError('Super Mario Odyssey takes its fonts from --firmware <unpacked firmware NCA directory> (or a card '
+                         'image), not --shared-fonts')
+    if not args.work:   # Odyssey_build next to the game file, not TOTK_build (as Breath of the Wild does)
+        if fresh_work:
+            shutil.rmtree(work)
+        work = game.parent / 'Odyssey_build'
+        logs = work / 'logs'
+        tree = prepare_work(work, py, logs)   # the venv, SPIRV-Cross copy and staged translator in this work folder
+    if not args.out:
+        out = game.parent / f'{APPS["odyssey"][0]}.app'
+    check_package(game, 'odyssey', 'base')
+    if update:
+        check_package(update, 'odyssey', 'update')
+        update = prepare_update_container(tree, update, keys, logs)
+    elif kind != 'xci':
+        say('no --update: the game file must hold both the base game and the update (1.3.0 or 1.4.1)')
+    if kind == 'nsp' and not firmware:
+        raise BuildError('NSP files do not include system shared fonts: pass --firmware <unpacked firmware NCA directory>')
+    say(f'Super Mario Odyssey; work folder {work}')
+    cmd = [tree / '.venv/bin/python', ODYSSEY / 'scripts/build_odyssey.py', '--game', game, '--keys', keys,
+           '--work', work / 'odyssey', '--out', out, '--translator', tree / STAGED_TRANSLATOR,
+           '--spirv-cross-src', work / 'src/SPIRV-Cross', *(['--update', update] if update else []),
+           *(['--firmware', firmware] if firmware else [])]
+    log = logs / 'build-odyssey.log'
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with open(log, 'w') as f:   # the Odyssey builder prints its own steps: shown and kept in the log
+        p = subprocess.Popen([str(c) for c in cmd], cwd=ODYSSEY, env=env, stdout=subprocess.PIPE,
+                             stderr=subprocess.STDOUT, text=True, bufsize=1)
+        for line in p.stdout:
+            f.write(line)
+            f.flush()
+            if line.startswith(('== ', '   done', '   Super Mario', '   app:', '   combined', 'Built ', 'cannot build')):
+                print(line, end='', flush=True)
+        p.wait()
+    if p.returncode:
+        tail = log.read_text(errors='replace').splitlines()[-25:]
+        raise BuildError(f'build_odyssey.py failed (exit {p.returncode}); full output: {log}\n' + '\n'.join(tail))
+    run([LSREGISTER, '-f', out], logs / 'register-app.log')
+    say(f'done in {(time.time() - t0) / 60:.0f} min: {out}')
+    say('Open it from Finder. Saves, the shader cache and the log go to ~/Library/Application Support/MacNativeGames/Odyssey.')
+
+
 def parse_args(argv):
     ap = argparse.ArgumentParser(description='Build a native Mac app or unsigned iPhone/iPad IPA from TOTK base 1.0.0 (XCI/NSP), optionally with the separate 1.1.2, 1.2.1 or 1.4.3 update; or a Mac app from Breath of the Wild: a combined 1.6.0 card image, a base game with the separate 1.6.0 update, or a base NSP with its 1.9.0 update NSP and optional add-on content NSPs (--dlc).',
                                  epilog='example: python3 build_app.py ~/Games/totk.xci -k ~/keys/prod.keys')
@@ -1936,6 +1991,9 @@ def main(argv):
         raise no_fonts
     if dlcs and which != 'botw':
         raise BuildError(f'{APPS[which][0]} has no DLC support: leave out --dlc')
+    if which == 'odyssey':
+        build_odyssey(args, tree, game, update, keys, kind, firmware, shared_fonts, work, out, py, env, logs, t0, fresh_work)
+        return
     if which == 'botw':
         if args.platform == 'visionos':
             raise BuildError('Breath of the Wild has no native Vision Pro build yet: use --platform macos or ios')

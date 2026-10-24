@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Build Odyssey.app: a self-contained, locally signed Mac app around the native runtime.
+"""Build <work>/Odyssey.app: a self-contained, locally signed Mac app around the native runtime.
 
 The bundle carries the runtime, shader tools, rewritten modules, merged RomFS and shared fonts (large files are APFS
-clones, so they take no extra space). Saves, the shader cache and the log go to "Odyssey Data" next to the app
-(scripts/odyssey_app_launcher.c). Both stay in the ignored Odyssey_build folder; the app contains game data from the
-user's own dump and must not be shared. On first packaging "Odyssey Data" is seeded with the newest local save
-(the test app's profile or a baseline) and the warmed shader cache; existing data is never replaced.
+clones, so they take no extra space). Saves, the shader cache and the log go to
+~/Library/Application Support/MacNativeGames/Odyssey (scripts/odyssey_app_launcher.c); packaging writes nothing there.
+scripts/build_odyssey.py then puts the app at its --out path as "Super Mario Odyssey.app". The app contains game data
+from the user's own dump and must not be shared.
 """
 from pathlib import Path
 import os
@@ -16,7 +16,6 @@ import subprocess
 GAME = Path(__file__).resolve().parents[1]
 BUILD = Path(os.environ.get("ODYSSEY_WORK", GAME / "Odyssey_build")).resolve()   # ODYSSEY_WORK: another build folder (scripts/build_odyssey.py)
 APP = BUILD / "Odyssey.app"
-DATA = BUILD / "Odyssey Data"
 ICON = BUILD / "app-assets/OdysseyIcon.jpg"
 CHAIN = "rt-totk-native-v4-unverified"
 
@@ -26,33 +25,6 @@ def clone(source: Path, target: Path):
     target.parent.mkdir(parents=True, exist_ok=True)
     if subprocess.run(["cp", "-c", str(source), str(target)]).returncode != 0:
         shutil.copy2(source, target)
-
-
-def save_time(profile: Path) -> float:
-    files = [f for f in (profile / "save").rglob("File1.bin")] if (profile / "save").is_dir() else []
-    return max((f.stat().st_mtime for f in files), default=0)
-
-
-def seed_data():
-    DATA.mkdir(exist_ok=True)
-    profile = DATA / "profile"
-    if save_time(profile):
-        print("Odyssey Data already has a save; left as it is.")
-    else:
-        candidates = [BUILD / "manual-test/profile", BUILD / "profiles/bonneton-cappy", BUILD / "profiles/cap-kingdom-start"]
-        best = max(candidates, key=save_time)
-        if save_time(best):
-            profile.mkdir(mode=0o700, exist_ok=True)
-            shutil.copy2(best / "account.uid", profile / "account.uid")
-            shutil.copytree(best / "save", profile / "save", dirs_exist_ok=True)
-            print(f"Seeded the save from {best.relative_to(BUILD)}.")
-    cache = DATA / "shader-cache"
-    if not cache.exists() and (BUILD / "build/shader-cache").is_dir():
-        subprocess.run(["cp", "-cR", str(BUILD / "build/shader-cache"), str(cache)], check=True)
-        print("Seeded the shader cache.")
-    minutes = DATA / "session-minutes.txt"
-    if not minutes.exists():
-        minutes.write_text("20\n")
 
 
 def main():
@@ -106,9 +78,9 @@ def main():
     subprocess.run(["sips", "-s", "format", "icns", str(ICON), "--out", str(resources / "OdysseyIcon.icns")],
                    check=True, stdout=subprocess.DEVNULL)
     info = {
-        "CFBundleDevelopmentRegion": "en", "CFBundleDisplayName": "Odyssey", "CFBundleName": "Odyssey",
+        "CFBundleDevelopmentRegion": "en", "CFBundleDisplayName": "Super Mario Odyssey", "CFBundleName": "Super Mario Odyssey",
         "CFBundleExecutable": "Odyssey", "CFBundleIconFile": "OdysseyIcon",
-        "CFBundleIdentifier": "local.projectidea.odyssey", "CFBundleInfoDictionaryVersion": "6.0",
+        "CFBundleIdentifier": "org.mng.odyssey", "CFBundleInfoDictionaryVersion": "6.0",
         "CFBundlePackageType": "APPL", "CFBundleShortVersionString": "0.2", "CFBundleVersion": "2",
         "LSApplicationCategoryType": "public.app-category.games", "LSMinimumSystemVersion": "26.0",
         "NSHighResolutionCapable": True,
@@ -116,7 +88,6 @@ def main():
     with (contents / "Info.plist").open("wb") as file:
         plistlib.dump(info, file)
     subprocess.run(["codesign", "--force", "--sign", "-", str(APP)], check=True, stdout=subprocess.DEVNULL)
-    seed_data()
     print(APP)
 
 

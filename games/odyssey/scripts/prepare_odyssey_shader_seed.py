@@ -26,6 +26,7 @@ import sys
 
 GAME = Path(__file__).resolve().parents[1]
 BUILD = Path(os.environ.get("ODYSSEY_WORK", GAME / "Odyssey_build")).resolve()   # ODYSSEY_WORK: another build folder
+VERSION = os.environ.get("ODYSSEY_VERSION", "1.3.0")   # the update display version (scripts/build_odyssey.py)
 UPSTREAM = GAME / "third_party/totk-scripts/prepare_shader_seed.py"   # a copy of games/totk's (2026-10-22)
 STAGE_NUMBER = {"vs": 0, "ps": 1, "cs": 5}   # NVN stage numbers in pso_manifest.tsv rows
 
@@ -115,7 +116,7 @@ def salvage(seed, output: Path):
         reply = json.loads(service.stdout.readline())
         errors.append(dict(key=key, stage=stage, source=source, ok=bool(reply.get("ok")), error=reply.get("error")))
     service.stdin.close(); service.wait()
-    report = dict(schema=1, chain=seed.CHAIN, version="1.3.0", game="odyssey", source_romfs_sha256=index["romfs_sha256"],
+    report = dict(schema=1, chain=seed.CHAIN, version=VERSION, game="odyssey", source_romfs_sha256=index["romfs_sha256"],
                   shaders=len(done), discovered=len(shaders), startup_shaders=len(done), skipped=errors, archives=archives,
                   salvaged=time.strftime("%Y-%m-%d %H:%M"), files={})
     (staging / "seed-manifest.json").write_text(json.dumps(report, indent=2) + "\n")
@@ -250,7 +251,7 @@ def main():
         salvage(seed, a.output)
     elif not a.finish_only:
         seed.prepare(BUILD / "extracted/local/romfs", a.output, BUILD / "build/shader-service/totk_xlate",
-                     BUILD / "build/spirv-cross/spirv-cross", "1.3.0", modules=BUILD / "rewritten", game="totk")
+                     BUILD / "build/spirv-cross/spirv-cross", VERSION, modules=BUILD / "rewritten", game="totk")
     finish(a.output, seed.CHAIN)
 
 

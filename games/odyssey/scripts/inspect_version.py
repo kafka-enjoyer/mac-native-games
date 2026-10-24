@@ -21,6 +21,7 @@ spec = importlib.util.spec_from_file_location('by3_merge_romfs', HERE / 'third_p
 by3_merge = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(by3_merge)
 Ctr, romfs_section, verify_ivfc = by3_merge.Ctr, by3_merge.romfs_section, by3_merge.verify_ivfc
+UPDATES = ('1.3.0', '1.4.1')   # supported update display versions (assets/expected-*.json)
 
 
 def main():
@@ -30,6 +31,7 @@ def main():
     parser.add_argument('--output', type=Path, default=HERE / 'Odyssey_build/analysis/versions.json')
     args = parser.parse_args()
     keys = load_keys(args.keys)
+    args.output = args.output.resolve()
     args.output.parent.mkdir(parents=True, exist_ok=True)
     versions = []
     with args.game.open('rb') as source:
@@ -44,7 +46,7 @@ def main():
             ctr = Ctr(source, record['nca_offset'], record['size'], nca_ctr_key(hdr, keys, tickets))
             require(end <= ctr.size, 'Control RomFS exceeds stored NCA')
             upper = fs[0x140:0x148][::-1]
-            with tempfile.TemporaryDirectory(dir=HERE / 'Odyssey_build') as temporary:
+            with tempfile.TemporaryDirectory(dir=args.output.parent) as temporary:   # inside the (ignored) work folder
                 image = Path(temporary) / 'control-romfs.bin'
                 counts, size, digest = verify_ivfc(fs, end - start,
                     lambda offset, length: ctr.read(start + offset, length, upper), image)
@@ -55,11 +57,12 @@ def main():
                     data.seek(nacp[0]['offset'] + 0x3060)
                     raw = data.read(16)
                 version = raw.split(b'\0', 1)[0].decode('ascii')
-                require(version in ('1.0.0', '1.3.0'), 'Unexpected Odyssey display version')
+                require(version in ('1.0.0', *UPDATES), f'Unexpected Odyssey display version {version} '
+                        f'(supported updates: {", ".join(UPDATES)})')
                 versions.append(dict(nca=record['name'], display_version=version,
                                      romfs_size=size, romfs_sha256=digest, ivfc_blocks=counts))
-    require(sorted(item['display_version'] for item in versions) == ['1.0.0', '1.3.0'],
-            'Base and update versions do not match the expected pair')
+    found = sorted(item['display_version'] for item in versions)
+    require(found[0] == '1.0.0' and found[1] in UPDATES, 'Base and update versions do not match the expected pair')
     report = dict(status='pass', versions=versions,
                   integrity='Both Control FS headers and all six IVFC levels verified; RSA signatures not checked')
     args.output.write_text(json.dumps(report, indent=2) + '\n')

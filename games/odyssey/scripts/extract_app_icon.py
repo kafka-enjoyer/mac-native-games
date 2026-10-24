@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
-"""Extract the verified local Odyssey 1.3.0 Control icon for a local test app.
+"""Extract the verified Control icon of the local Odyssey update (1.3.0 or 1.4.1) for the app.
 
-The icon is game-derived. Write it only under ignored Odyssey_build; never commit it.
+The icon is game-derived. Write it only to an ignored work folder (a *_build folder of games/odyssey, the repository's
+build-artifacts/, or a folder outside the repository); never commit it.
 """
 import argparse
 import tempfile
@@ -22,9 +23,12 @@ def main():
     parser.add_argument('--output', type=Path,
                         default=HERE / 'Odyssey_build/app-assets/OdysseyIcon.jpg')
     args = parser.parse_args()
-    out = args.output.resolve()   # a *_build folder in games/odyssey: ignored by .gitignore, like Odyssey_build
-    require(any(parent.parent == HERE.resolve() and parent.name.endswith('_build') for parent in out.parents),
-            'Icon output must stay under an ignored *_build folder of games/odyssey')
+    out = args.output.resolve()   # a *_build folder in games/odyssey or build-artifacts/: ignored by .gitignore
+    repo = HERE.resolve().parents[1]
+    require(not out.is_relative_to(repo) or out.is_relative_to(repo / 'build-artifacts')
+            or any(parent.parent == HERE.resolve() and parent.name.endswith('_build') for parent in out.parents),
+            'Icon output must stay in an ignored folder (a *_build folder of games/odyssey, or build-artifacts/)')
+    out.parent.mkdir(parents=True, exist_ok=True)
     keys = load_keys(args.keys)
     with args.game.open('rb') as source:
         _, entries = container_entries(source, args.game.stat().st_size)
@@ -38,7 +42,7 @@ def main():
             ctr = Ctr(source, record['nca_offset'], record['size'], nca_ctr_key(hdr, keys, tickets))
             require(end <= ctr.size, 'Control RomFS exceeds stored NCA')
             upper = fs[0x140:0x148][::-1]
-            with tempfile.TemporaryDirectory(dir=HERE / 'Odyssey_build') as temp:
+            with tempfile.TemporaryDirectory(dir=out.parent) as temp:
                 image = Path(temp) / 'control-romfs.bin'
                 verify_ivfc(fs, end - start,
                             lambda offset, length: ctr.read(start + offset, length, upper), image)
@@ -47,7 +51,7 @@ def main():
                 with image.open('rb') as data:
                     data.seek(nacp['offset'] + 0x3060)
                     version = data.read(16).split(b'\0', 1)[0].decode('ascii')
-                if version != '1.3.0':
+                if version == '1.0.0':   # the base game's Control data; the icon comes from the update's
                     continue
                 icons = [item for item in files if item['path'].startswith('icon_')]
                 require(icons, 'Update Control RomFS contains no title icon')
@@ -59,7 +63,7 @@ def main():
                         'Control icon is not a complete JPEG')
                 args.output.parent.mkdir(parents=True, exist_ok=True)
                 args.output.write_bytes(contents)
-                print(f'Verified local 1.3.0 title icon -> {args.output}')
+                print(f'Verified local {version} title icon -> {args.output}')
                 return
     raise SystemExit('Update Control icon not found')
 

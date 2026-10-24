@@ -222,7 +222,7 @@ static void front_start_cursor_hiding(void){
 static TOTKWindowDelegate *windowDelegate;
 int runtime_front_window_visible(void){return atomic_load(&windowVisible);}
 void runtime_front_request_close(void){dispatch_async(dispatch_get_main_queue(), ^{[window performClose:nil];});}
-/* The data folder is the parent of TOTK_PROFILE_DIR: "Odyssey Data" for the app, whose launcher writes last-run.log there;
+/* The data folder is the parent of TOTK_PROFILE_DIR: ~/Library/Application Support/MacNativeGames/Odyssey for the app, whose launcher writes last-run.log there;
    a probe's save copy for agent runs, where there is no log and Show Log is disabled. */
 static NSURL *front_data_folder(void){const char *p=getenv("TOTK_PROFILE_DIR");return p&&*p?[[NSURL fileURLWithPath:@(p)] URLByDeletingLastPathComponent]:nil;}
 static NSURL *front_log_file(void){NSURL *d=front_data_folder();NSURL *f=[d URLByAppendingPathComponent:@"last-run.log"];return f&&[NSFileManager.defaultManager fileExistsAtPath:f.path]?f:nil;}

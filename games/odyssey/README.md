@@ -34,47 +34,56 @@ Exact measurements and logs are in the development log below and in the project'
 ## What you need
 
 - An Apple silicon Mac with macOS 26 or newer, and Xcode with the Metal 4 SDK (tested with Xcode 27.1).
-- Super Mario Odyssey with the **1.3.0** update, as a combined XCI or NSP that you dumped yourself. Other versions are
-  rejected by hash, including **1.4.1**: it has the same executables but slightly different data, and is not
-  supported yet (see "Version naming" below).
+- Super Mario Odyssey that you dumped yourself: the **base game** (NSP or XCI) and the **1.3.0 or 1.4.1 update** NSP,
+  as separate files (a combined XCI/NSP holding both still works). 1.4.1 has the same executables and, once merged,
+  byte-identical game data (see "Version naming" below).
 - `prod.keys` dumped from your own Switch.
 - Your Switch's **firmware** files (its NCA folder), dumped from your own Switch: the system fonts come from there.
   Some game cards carry them in their system-update partition, but not all (the tested 1.3.0 card doesn't).
-- Homebrew `opus` and `libvpx` (`brew install opus libvpx`), and Python 3 with `capstone`, `cryptography` and `lz4`.
-- About 12 GB of free disk space.
+- The repository's offline build setup, as for Tears of the Kingdom: `dependencies/` restored, the Homebrew libraries
+  pinned in `dependencies/homebrew-pins.json` (opus, libvpx), Python 3.14, and the source-built shader translator
+  (`just build-translator`). Nothing is downloaded during the build.
+- About 25 GB of free disk space (the combined input, 6 GB, is removed after a successful build).
 
-Everything the build writes goes to a work folder inside `games/odyssey` (default `Odyssey_build/`), which Git
-ignores. Never commit or share anything from it: it contains game data.
+Everything the build writes goes to its work folder (`--work`; with the justfile `build-artifacts/work/odyssey`), which
+Git ignores. Never commit or share anything from it: it contains game data.
 
 ## Build your own copy
 
-From `games/odyssey/`:
+From the repository root, the same way as Tears of the Kingdom and Breath of the Wild:
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install capstone cryptography lz4
-.venv/bin/python scripts/build_odyssey.py --game YOUR_GAME.xci --keys prod.keys --firmware YOUR_FIRMWARE_FOLDER
-open Odyssey_build/Odyssey.app
+just build odyssey     # dumps/odyssey/odyssey-base-v0.nsp + odyssey-update-v393216.nsp -> dist/odyssey/mac/
+# or directly:
+python3.14 build_app.py BASE.nsp --update UPDATE.nsp -k prod.keys --firmware FIRMWARE_FOLDER \
+    --work build-artifacts/work/odyssey -o "dist/odyssey/mac/Super Mario Odyssey.app"
 ```
 
-The script runs eight steps and stops with a clear message if something is missing:
+`build_app.py` recognises the game by its title ID, checks the offline dependencies, the Homebrew pins and the
+translator, then runs `scripts/build_odyssey.py` with the work folder's Python. Mac only (no `--platform ios`), no
+`--dlc` or `--mod`. That script runs eight steps and stops with a clear message if something is missing:
 
-1. check the input (title, version, integrity; it prints no keys or game data);
+1. combine the base and the update into one package (`scripts/combine_input.py`), check the input (title, version,
+   integrity; it prints no keys or game data) and pick the version (1.3.0 or 1.4.1) from the update's own data;
 2. extract the program modules and merge the base game with the update;
 3. extract the system fonts;
 4. rewrite the ARM64 modules ahead of time;
-5. verify the modules, the rewrite and the game data against the pinned 1.3.0 hashes;
-6. build the shader tools (pinned SPIRV-Cross) and the runtime;
+5. verify the modules, the rewrite and the game data against the version's pinned hashes (`assets/expected-*.json`);
+6. build the shader tools (the local SPIRV-Cross copy and the source-built translator) and the runtime;
 7. prepare the whole-game shader seed, so first play stutters much less (`--skip-seed` leaves it out);
-8. extract the game's icon and package `Odyssey.app`, with saves, shader cache and logs in `Odyssey Data` beside it.
+8. extract the game's icon, package the app and put it at `-o` as `Super Mario Odyssey.app` (bundle `org.mng.odyssey`).
+
+Saves, the shader cache and the log go to `~/Library/Application Support/MacNativeGames/Odyssey`, as for the other
+games, so rebuilding, moving or removing the app (`just clean odyssey`) keeps them. There is no session limit; a file
+`session-minutes.txt` in that folder sets one for test sessions.
 
 Each step is skipped when its verified output is already there, so after an error you fix the cause and run the same
-command again. Other options: `--work FOLDER` (a folder inside `games/odyssey` whose name ends in `_build`, with no
-space in its path below `games/odyssey`, since `make` can't handle spaces), `--developer-dir` for another Xcode.
+command again. Each version gets its own folder in the work folder (`odyssey/v130`, `odyssey/v141`).
 
-**Tested 23 October 2026** from an empty folder on the M3 test Mac with a 1.3.0 card dump: about 9 minutes in all
-(the shader seed about 6, packaging about 2). The rewritten modules, the merged game data and all 129,602 shader-seed files came
-out byte-identical to the known-good build, and the new app started and showed the game's opening screen. Not yet
-tried on a second Mac or with an NSP.
+**Tested 23 October 2026** (offline, under `sandbox-exec` with networking denied) from an empty work folder with a base
+NSP + 1.4.1 update NSP: about 7 minutes (shader seed about 4.5, packaging about 2); merged RomFS identical to 1.3.0's
+pin; 28,131 shaders in the seed. Earlier the same day, a 1.3.0 card dump built byte-identical to the known-good build
+and showed the game's opening screen. Plan and status: [BUILD_ALIGNMENT.md](BUILD_ALIGNMENT.md).
 
 Optional, after you've played a while: `scripts/precompile_cached_shaders.py` compiles the shaders your game has
 translated into Metal libraries ahead of time; then run the build command again to repackage.
@@ -83,8 +92,8 @@ translated into Metal libraries ahead of time; then run the build command again 
 
 - Keyboard: WASD move, J jump (A), K (B), U throw cap (Y), I (X), arrows camera, Return pause (+). Game controllers
   supported by macOS work too.
-- Full screen by default; ⌃⌘F or the green button leaves it. Create an empty file `windowed` in `Odyssey Data` to
-  start in a window, or `no-metalfx` to turn off MetalFX upscaling.
+- Full screen by default; ⌃⌘F or the green button leaves it. Create an empty file `windowed` in
+  `~/Library/Application Support/MacNativeGames/Odyssey` to start in a window, or `no-metalfx` to turn off MetalFX upscaling.
 - The app is built from your own game files: do not share it.
 
 ---
@@ -123,16 +132,16 @@ Upstream MacNativeGames is 359 commits ahead of our `43f53b4` checkout (`origin/
 
 The new Metal compile flag `shouldMaximizeConcurrentCompilation` is also set (`DM_MAX_CONCURRENT_COMPILE=0` turns it off). The renderer objects compile. `tests/system_event_bind/probe.c` passes all three parts against the new `threads.c` and fails against the old one. Four bounded 90 s GPU runs resumed a copy of the Cap Kingdom save and alternated prefetch off and on; all exited 0 and reached the same in-game scene. In run order (off/on/off/on), long frames after 45 s were 26/40/10/4, worst 644/174/104/87 ms, with no in-game compile stalls after the first run. Warming across runs dominates, so prefetch's own effect is not established. The startup critical-pipeline wait swung between 0.2 and 38.9 s with Metal cache state (`boot-ab-prefetch-*.log`). The upstream **pipeline binary archive** was then ported and is on by default (`TOTK_PIPELINE_ARCHIVE=0` turns it off). Five bounded runs cut startup warm-up from 4.4 s (off) to 1.6 s (149 archived pipelines). After a rebuild, though, the first runs can spend more than 90 s compiling shader libraries from source before the first frame. Removing that needs precompiled `.metallib` files and the Metal Toolchain, whose download is still pending. [`PLAYBOOK.md`](PLAYBOOK.md) collects outside techniques for later problems, with sources: emulator bug history for SMO, 1.3.0 mod offsets, test and replay tools, the save format, GPU fault reporting, pacing, audio, input and packaging. [`TECHNIQUES.md`](TECHNIQUES.md) lists each backport with its upstream measurement, the upstream work still to port (pipeline binary archive first), and external techniques with sources.
 
-### Version naming: 1.3.0 and 1.4.1 share their executables, not their data
+### Version naming: 1.3.0 and 1.4.1 share their executables and their merged data
 
 This port is built and verified against update **1.3.0** (the update's Control NACP, `scripts/inspect_version.py`,
-`Odyssey_build/analysis/versions.json`). Update **1.4.1** is a later update with the **same executables** but
-**slightly different data**:
+`Odyssey_build/analysis/versions.json`). Update **1.4.1** is a later update with the **same executables**; its
+update package is laid out differently, but merged with the base game it gives the **same RomFS** (built 23 October):
 
 - Checked 23 October 2026 against a local 1.4.1 update NSP (metadata and hashes only): its NACP says **1.4.1**;
   `main`, `sdk`, `subsdk0` and `rtld` are byte-identical to 1.3.0's (same SHA-256 and build IDs); `main.npdm` differs
   only in a 512-byte block near its start (the signature area); its program NCA is 16,896 bytes larger, so its RomFS
-  patch differs. Which RomFS files differ is not known yet.
+  patch differs, but the merged RomFS does not (same size and SHA-256 as 1.3.0's).
 - Other projects target the same executables under the 1.4.1 name: **[nxnative](https://github.com/seedds/nxnative)**
   (profile `dm/games/0100000000010000/game.tsv`, `build v393216 1.4.1`, with these build IDs) and probably
   **[smo-recomp](https://github.com/Coz-0/smo-recomp)** (no build IDs published; our main already imports the Labo VR
@@ -148,9 +157,10 @@ What this means:
 
 - Code addresses (`main+0x…`, `sdk+0x…`) from nxnative or smo-recomp apply to this build; per AGENTS.md rule 5,
   still verify each one by disassembly before using it.
-- **The build accepts 1.3.0 only.** `scripts/prepare_runtime.py` checks the merged RomFS against
-  `assets/expected-local-update.json`, so 1.4.1's different data is rejected until it is examined and added as a
-  supported version.
+- **The build accepts 1.3.0 and 1.4.1** (`assets/expected-local-update.json`, `assets/expected-v1.4.1.json`). Merged
+  with the base game, 1.4.1's RomFS is byte-identical to 1.3.0's (same size and SHA-256, all IVFC levels verified,
+  23 October); only its update package differs: its AES-CTR-Ex table stops where the indirect table starts, which
+  `third_party/by3-scripts/merge_romfs.py` now accepts.
 
 ## Open in Xcode
 

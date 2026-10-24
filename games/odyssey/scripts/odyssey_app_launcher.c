@@ -1,11 +1,12 @@
-/* Odyssey.app launcher (scripts/package_native_app.py builds the bundle around it).
+/* Super Mario Odyssey.app launcher (scripts/package_native_app.py builds the bundle around it).
    Everything the game reads is inside the bundle (Contents/Resources/game: runtime, shader tools, rewritten modules,
-   RomFS, shared fonts); everything it writes is in "Odyssey Data" next to the app (saves, shader cache, log), so the
-   app keeps working when the project checkout is not there. Contents/MacOS/odyssey-native is a symlink to the bundled
+   RomFS, shared fonts); everything it writes is in ~/Library/Application Support/MacNativeGames/Odyssey (saves, shader
+   cache, log), as for Tears of the Kingdom and Breath of the Wild, so the app can be moved, rebuilt or removed without
+   touching the saves. Contents/MacOS/odyssey-native is a symlink to the bundled
    runtime: started through it, the window belongs to this app (name and icon), while the runtime still finds its shader
    tools next to the real file. The game runs as the user's (TOTK_SLOT_OWNER=user), so it takes the one-game slot ahead
-   of test runs. "Odyssey Data/session-minutes.txt" sets a session limit (default 20, 0 = none): the copied renderer
-   has caused GPU driver panics in long sessions, so sessions stay bounded until longer runs are verified. */
+   of test runs. No session limit by default; "<data>/session-minutes.txt" sets one (minutes, 0 = none) for test
+   sessions. */
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -35,7 +36,7 @@ static int run(const char *const argv[]) {   /* a system tool, waited for */
 }
 static int newest_first(const void *a, const void *b) { return strcmp(*(char *const *)b, *(char *const *)a); }
 /* Saves are rewritten in place (runtime/fs_host.c), so a crash during a write could leave the only copy damaged: keep the
-   saves as they were before each of the last five sessions in "Odyssey Data/backups/<date-time>". */
+   saves as they were before each of the last five sessions in "<data>/backups/<date-time>". */
 static void back_up_saves(const char *profile, const char *data, const char *stamp) {
     char saves[PATH_MAX], backups[PATH_MAX], target[PATH_MAX]; struct stat st;
     join(saves, profile, "save"); join(backups, data, "backups");
@@ -59,8 +60,8 @@ static void append(const char *path, const char *line) {
 int main(void) {
     char exe[PATH_MAX], real[PATH_MAX]; uint32_t size = sizeof exe;
     if (_NSGetExecutablePath(exe, &size) || !realpath(exe, real)) return 1;
-    char macos[PATH_MAX], contents[PATH_MAX], app[PATH_MAX], home[PATH_MAX];
-    parent_of(macos, real); parent_of(contents, macos); parent_of(app, contents); parent_of(home, app);
+    char macos[PATH_MAX], contents[PATH_MAX];
+    parent_of(macos, real); parent_of(contents, macos);
 
     char game[PATH_MAX], runtime[PATH_MAX], modules[PATH_MAX], romfs[PATH_MAX], fonts[PATH_MAX], resources[PATH_MAX];
     join(resources, contents, "Resources"); join(game, resources, "game");
@@ -68,7 +69,12 @@ int main(void) {
     join(romfs, game, "romfs"); join(fonts, game, "fonts");
 
     char data[PATH_MAX], profile[PATH_MAX], cache[PATH_MAX], commands[PATH_MAX], log[PATH_MAX], minutes_path[PATH_MAX];
-    join(data, home, "Odyssey Data"); join(profile, data, "profile");
+    const char *user_home = getenv("HOME");
+    if (!user_home || !*user_home) { fputs("Odyssey: HOME is not set\n", stderr); return 1; }
+    char support[PATH_MAX], games[PATH_MAX];   /* ~/Library/Application Support/MacNativeGames/Odyssey */
+    join(support, user_home, "Library/Application Support"); join(games, support, "MacNativeGames");
+    mkdir(support, 0755); mkdir(games, 0755);
+    join(data, games, "Odyssey"); join(profile, data, "profile");
     join(cache, data, "shader-cache/rt-totk-native-v4-unverified");
     join(commands, data, "commands.txt"); join(log, data, "last-run.log"); join(minutes_path, data, "session-minutes.txt");
     mkdir(data, 0755); mkdir(profile, 0700);
@@ -81,23 +87,23 @@ int main(void) {
     struct stat st;
     if (!*slot || stat(slot, &st) || !S_ISDIR(st.st_mode)) { join(slot, data, "game-slot"); mkdir(slot, 0755); }
 
-    double minutes = 20;
+    double minutes = 0;   /* no limit unless session-minutes.txt asks for one */
     FILE *mf = fopen(minutes_path, "r");
-    if (mf) { if (fscanf(mf, "%lf", &minutes) != 1 || minutes < 0) minutes = 20; fclose(mf); }
+    if (mf) { if (fscanf(mf, "%lf", &minutes) != 1 || minutes < 0) minutes = 0; fclose(mf); }
 
     FILE *cf = fopen(commands, "w"); if (cf) fclose(cf);
     setenv("TOTK_GPU_ALLOW_SUBMIT", "1", 1); setenv("TOTK_GPU_WIDEN", "1", 1); setenv("TOTK_GPU_BLOCKRT", "1", 1);
     setenv("TOTK_PROFILE_DIR", profile, 1); setenv("TOTK_SHADER_CACHE", cache, 1);
     setenv("TOTK_ROMFS", romfs, 1); setenv("TOTK_SHARED_FONTS", fonts, 1); setenv("TOTK_INPUT_FILE", commands, 1);
-    setenv("TOTK_GAME_SLOT_DIR", slot, 1); setenv("TOTK_SLOT_OWNER", "user", 1); setenv("TOTK_SLOT_PURPOSE", "Odyssey.app", 1);
+    setenv("TOTK_GAME_SLOT_DIR", slot, 1); setenv("TOTK_SLOT_OWNER", "user", 1); setenv("TOTK_SLOT_PURPOSE", "Super Mario Odyssey.app", 1);
     setenv("TOTK_SHADER_ASYNC", "1", 0);
     /* MetalFX spatial upscale of the 1600x900 game output to the window (Applier's A/B, 22 October: no artifacts, no
-       measurable cost, slightly crisper edges). On unless "Odyssey Data/no-metalfx" exists. */
+       measurable cost, slightly crisper edges). On unless "<data>/no-metalfx" exists. */
     char no_mfx[PATH_MAX]; join(no_mfx, data, "no-metalfx");
     if (stat(no_mfx, &st)) { setenv("TOTK_MFX_UPSCALE", "1", 0); setenv("TOTK_MFX_OUTPUT", "1", 0); }
     /* Full screen from the start (Applier's 0c A/B, 22 October: input-to-present latency p50 63 -> 30 ms, because the
        windowed compositor path adds ~34 ms of display-link lead). ⌃⌘F or the green button leaves it. Windowed when
-       "Odyssey Data/windowed" exists. */
+       "<data>/windowed" exists. */
     char windowed[PATH_MAX]; join(windowed, data, "windowed");
     if (stat(windowed, &st)) setenv("BY3_FULLSCREEN", "1", 0);
     for (const char *const *v = (const char *const[]){"TOTK_ASSUME_FOCUS", "TOTK_VERIFY_STARTUP", "TOTK_HEADLESS", NULL}; *v; v++) unsetenv(*v);
