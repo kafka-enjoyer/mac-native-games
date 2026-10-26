@@ -4,6 +4,7 @@
 #   just build totk visionos      Tears of the Kingdom IPA (Vision Pro)
 #   just build botw               Breath of the Wild 1.9.0 for the Mac (base + update + both DLC packs)
 #   just build odyssey            Super Mario Odyssey 1.4.1 for the Mac (base + update; Mac only)
+#   just games                    every game and whether it builds yet (the others print NotYetImplemented)
 #   just install "My iPhone"      sign with the dedicated Apple ID (.signing.env) and install
 #   just clean / just clean-work  remove releases / work folders (saves and caches in ~/Library are kept)
 # Any path below can be overridden: just totk-update=dumps/totk/other.nsp build
@@ -19,6 +20,13 @@ keys := dumps / "keys/prod.keys"
 work-root := "build-artifacts/work"
 dist := "dist"
 translator := "build-artifacts/translator-offline/native"
+
+# Games `build` makes; the rest are recognised but not built yet and print NotYetImplemented:
+#   ports merged from upstream, disabled until they build offline (games/<game>/OFFLINE.md): ssbu wonder mvdk ori jamboree,
+#   and by3 (Bayonetta 3, built by hand in games/by3); proofs of concept with dumps only: awakening (Link's Awakening,
+#   games/awakening on branch awakening-poc), echo (Echoes of Wisdom), sky (Skyward Sword HD).
+implemented := "totk botw odyssey"
+planned := "ssbu wonder mvdk ori jamboree by3 awakening echo sky"
 
 # Tears of the Kingdom: the card image (its firmware partition provides the shared fonts) and the 1.4.3 update
 totk-game := dumps / "totk/totk.xci"
@@ -38,10 +46,12 @@ firmware := dumps / "firmware/23.0.1"
 odyssey-game := dumps / "odyssey/odyssey-base-v0.nsp"
 odyssey-update := dumps / "odyssey/odyssey-update-v393216.nsp"
 
+# The games in `planned` print NotYetImplemented (just games).
 # Build a game: game = totk | botw | odyssey, platform = mac | ios | visionos. iOS / visionOS builds are unsigned IPAs.
 build game="totk" platform="mac":
     #!/usr/bin/env bash
     set -euo pipefail
+    if [[ " {{planned}} " == *" {{game}} "* ]]; then echo "NotYetImplemented"; exit 0; fi
     resolved=$({{quote(just_executable())}} --justfile {{quote(justfile())}} _resolve {{quote(game)}} {{quote(platform)}})   # fails here on a bad choice
     eval "$resolved"
     for input in "${required[@]}"; do [[ -e "$input" ]] || { echo "missing input: $input" >&2; exit 1; }; done
@@ -58,18 +68,20 @@ build game="totk" platform="mac":
 install device game="totk" platform="ios":
     #!/usr/bin/env bash
     set -euo pipefail
+    if [[ " {{planned}} " == *" {{game}} "* ]]; then echo "NotYetImplemented"; exit 0; fi
     resolved=$({{quote(just_executable())}} --justfile {{quote(justfile())}} _resolve {{quote(game)}} {{quote(platform)}})   # fails here on a bad choice
     eval "$resolved"
     [[ $ext == ipa ]] || { echo "only ios / visionos builds are installed on a device" >&2; exit 2; }
     [[ -f $out ]] || { echo "no build at $out: run just build {{game}} {{platform}}" >&2; exit 1; }
     {{python}} games/totk/ios/tools/install_device.py "$out" --device {{quote(device)}}
 
-# game = all | totk | botw | odyssey, platform = all | mac | ios | visionos
+# game = all | totk | botw | odyssey (or a planned game: nothing to remove yet), platform = all | mac | ios | visionos
 # Remove releases in dist/<game>/<platform> (app / IPA, .signed, partial outputs); saves and caches in ~/Library stay.
 clean game="all" platform="all":
     #!/usr/bin/env bash
     set -euo pipefail
-    case {{quote(game)}} in all) games=(totk botw odyssey);; totk|botw|odyssey) games=({{quote(game)}});; *) echo "game: all | totk | botw | odyssey" >&2; exit 2;; esac
+    if [[ " {{planned}} " == *" {{game}} "* ]]; then echo "NotYetImplemented"; exit 0; fi
+    case {{quote(game)}} in all) games=({{implemented}});; totk|botw|odyssey) games=({{quote(game)}});; *) echo "game: all | {{implemented}} | {{planned}}" >&2; exit 2;; esac
     case {{quote(platform)}} in all) platforms=(mac ios visionos);; mac|ios|visionos) platforms=({{quote(platform)}});; *) echo "platform: all | mac | ios | visionos" >&2; exit 2;; esac
     for g in "${games[@]}"; do for p in "${platforms[@]}"; do
         if [[ -e "{{dist}}/$g/$p" ]]; then rm -rf -- "{{dist}}/$g/$p"; echo "removed {{dist}}/$g/$p"; fi
@@ -79,10 +91,26 @@ clean game="all" platform="all":
 clean-work game="all":
     #!/usr/bin/env bash
     set -euo pipefail
-    case {{quote(game)}} in all) games=(totk botw odyssey);; totk|botw|odyssey) games=({{quote(game)}});; *) echo "game: all | totk | botw | odyssey" >&2; exit 2;; esac
+    if [[ " {{planned}} " == *" {{game}} "* ]]; then echo "NotYetImplemented"; exit 0; fi
+    case {{quote(game)}} in all) games=({{implemented}});; totk|botw|odyssey) games=({{quote(game)}});; *) echo "game: all | {{implemented}} | {{planned}}" >&2; exit 2;; esac
     for g in "${games[@]}"; do
         if [[ -e "{{work-root}}/$g" ]]; then rm -rf -- "{{work-root}}/$g"; echo "removed {{work-root}}/$g"; fi
     done
+
+# Every game `build` knows: built ones, and the ones that print NotYetImplemented.
+games:
+    #!/usr/bin/env bash
+    printf '%-10s %s\n' totk "Tears of the Kingdom (mac, ios, visionos)" botw "Breath of the Wild 1.9.0 (mac, ios)" \
+        odyssey "Super Mario Odyssey 1.4.1 (mac)"
+    printf '%-10s %s\n' ssbu "Super Smash Bros. Ultimate: NotYetImplemented (games/ssbu/OFFLINE.md)" \
+        wonder "Super Mario Bros. Wonder: NotYetImplemented (games/wonder/OFFLINE.md)" \
+        mvdk "Mario vs. Donkey Kong: NotYetImplemented (games/mvdk/OFFLINE.md)" \
+        ori "Ori and the Blind Forest: NotYetImplemented (games/ori/OFFLINE.md)" \
+        jamboree "Super Mario Party Jamboree: NotYetImplemented (games/jamboree/OFFLINE.md)" \
+        by3 "Bayonetta 3: NotYetImplemented (built by hand, games/by3/README.md)" \
+        awakening "Link's Awakening: NotYetImplemented (proof of concept, branch awakening-poc)" \
+        echo "Echoes of Wisdom: NotYetImplemented (proof of concept, dumps only)" \
+        sky "Skyward Sword HD: NotYetImplemented (proof of concept, dumps only)"
 
 # Rebuild the native .NET shader translator (with SPIRV-Cross built in) from source using only local dependencies.
 build-translator:
@@ -111,7 +139,7 @@ _resolve game platform:
         odyssey) app="Super Mario Odyssey"
               inputs=({{quote(odyssey-game)}} --update {{quote(odyssey-update)}} --firmware {{quote(firmware)}})
               required=({{quote(odyssey-game)}} {{quote(odyssey-update)}} {{quote(keys)}});;
-        *) echo "unknown game {{quote(game)}}: totk | botw | odyssey" >&2; exit 2;;
+        *) echo "unknown game {{quote(game)}}: {{implemented}} (not yet: {{planned}})" >&2; exit 2;;
     esac
     if [[ {{quote(game)}} == odyssey && {{quote(platform)}} != mac ]]; then
         echo "Super Mario Odyssey builds for the Mac only" >&2; exit 2

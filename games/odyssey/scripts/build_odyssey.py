@@ -22,7 +22,8 @@ Steps (each is skipped when its verified output already exists, so a failed run 
  4. rewrite the ARM64 modules ahead of time (third_party/d2r/patch_nso.py, native ruleset)
  5. loader tables: verifies ExeFS, rewrite and RomFS against the version's assets/expected-*.json
  6. shader tools (the local SPIRV-Cross and the source-built translator) and the runtime
- 7. the whole-game shader seed (the longest step; --skip-seed leaves it out)
+ 7. the whole-game shader seed (the longest step; --skip-seed leaves it out), then its Metal libraries, compiled ahead
+    of time so the game does not compile them on the spot when a scene first shows them (needs Xcode's Metal Toolchain)
  8. extract the game's icon, package the app and put it at --out; saves, shader cache and log go to
     ~/Library/Application Support/MacNativeGames/Odyssey
 
@@ -232,6 +233,16 @@ def main():
             print("   the seed's last step failed; salvaging the translated shaders")
             run([py, "scripts/prepare_odyssey_shader_seed.py", "--output", seed, "--salvage"], env=env)
         run([py, "scripts/prepare_odyssey_shader_seed.py", "--output", seed, "--rules"], env=env)
+    if not args.skip_seed and (seed / "seed-manifest.json").is_file():
+        # Without these the runtime compiles every Metal library from source the first time a scene shows it: about 11 s
+        # for the ~70 new shaders at the end of the Sand Kingdom arrival cutscene (24 October, an app built by this
+        # script before this step existed). package_native_app.py puts them in the app. Already compiled ones are kept.
+        try:
+            run([py, "scripts/precompile_cached_shaders.py", "--cache", seed, "--jobs", min(max(args.jobs, 1), 8)],
+                env={"ODYSSEY_WORK": str(work), "DEVELOPER_DIR": args.developer_dir})
+        except subprocess.CalledProcessError:
+            print("   some Metal libraries were not precompiled (see build/shader-libs/compile-failures.log, or install "
+                  "Xcode's Metal Toolchain); the game compiles those on first use")
     done(t)
 
     t = step(8, "Package the app")

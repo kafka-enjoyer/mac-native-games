@@ -34,9 +34,9 @@ This is an **offline-hardened fork** of [ly05010419/MacNativeGames](https://gith
    offline adaptations; a rebase drops them. Use `git pull --ff-only` or `--no-rebase`.
 9. **`games/awakening/` is developed by a separate agent on branch `awakening-poc`** (proof of concept). Do not edit
    it on `main`; the branch is merged into `main` only when the user asks (`merge: awakening-poc (<summary>)`).
-10. **Identifiers use `org.mng`, never `org.macnativegames`.** Bundle IDs, data-bundle IDs, `defaults` domains,
+10. **Identifiers use `org.mng`, never `org.mng`.** Bundle IDs, data-bundle IDs, `defaults` domains,
     LaunchAgent labels and docs: `org.mng.<game>` (`org.mng.totk`, `org.mng.botw`, `org.mng.odyssey`, `org.mng.by3`).
-    Upstream merges reintroduce `org.macnativegames`; rename it during conflict resolution.
+    Upstream merges reintroduce `org.mng`; rename it during conflict resolution.
 
 ## Directory structure
 
@@ -48,6 +48,8 @@ This is an **offline-hardened fork** of [ly05010419/MacNativeGames](https://gith
 | `games/odyssey/` | Super Mario Odyssey: own runtime, Makefile and builder (`scripts/build_odyssey.py`), called by `build_app.py` after the shared offline checks; plan in `BUILD_ALIGNMENT.md` | tracked |
 | `games/by3/` | Bayonetta 3; carries its own copies (see CONTRIBUTING) | tracked |
 | `games/awakening/` | Link's Awakening proof of concept (notes so far), developed on `awakening-poc` (rule 9) | tracked |
+| `games/{ssbu,wonder,mvdk,ori,jamboree}/` | Community ports merged from upstream as-is. **Disabled**: their builders raise `NotImplementedError` and their Makefiles `$(error)` until adapted offline; each `OFFLINE.md` lists what still fetches code, uses a prebuilt translator or links unpinned libraries (`tests/test_unported_games.py`) | tracked |
+| `update_runtime.py` | Upstream's runtime-only update of an existing app (no game files); uses `build_app.prepare_work` and the staged source-built translator | tracked |
 | `vendor/ryujinx/` | Ryujinx shader translator sources (patched at build) | tracked |
 | `tools/` | `homebrew_pins.py` (pin check/update), disabled `download_dependencies.py` | tracked |
 | `tests/` | Python unit tests (`unittest`), incl. offline/supply-chain guards | tracked |
@@ -64,6 +66,7 @@ Run `just --list`. Defaults: `game=totk`, `platform=mac`. Paths are just variabl
 
 | Recipe | What it does |
 |---|---|
+| `just games` | List every game: built ones, and those whose recipes print `NotYetImplemented` (`ssbu wonder mvdk ori jamboree by3` and the proofs of concept `awakening echo sky`, dumps in `dumps/<game>/`) |
 | `just build [totk\|botw\|odyssey] [mac\|ios\|visionos]` | Build from `dumps/` into `dist/<game>/<platform>/`, work folder `build-artifacts/work/<game>` (shared across platforms). Device builds pass `--no-shader-reminder`. BotW builds 1.9.0 (base + update + both DLC + firmware fonts); Odyssey builds 1.4.1 (base + update + firmware fonts), Mac only; visionOS is TOTK only |
 | `just install "<device>" [game] [ios\|visionos]` | Sign with the dedicated Apple ID (`.signing.env`) and install |
 | `just clean [game\|all] [platform\|all]` | Remove releases only |
@@ -124,6 +127,11 @@ Per game; observed by the user, not yet debugged. Remove an entry once it is fix
 
 ## Gotchas
 
+- The disabled ports (`games/ssbu`, `wonder`, `mvdk`, `ori`, `jamboree`) are left as upstream ships them apart from the
+  guards and the `org.mng` rename; upstream merges may change them freely. Keep the guards until a port is adapted.
+- Full builds need disk space: `just clean-work <game>` after a build frees the work folder; the release keeps its
+  APFS clones of the data.
+
 - `build_app.py` takes `-o/--out` (not `--output`) and puts its work folder **next to the game file** unless `--work`
   is given. Always use the recipes or pass `--work build-artifacts/work/<game>`.
 - Use `python3.14` (the wheels target CPython 3.14 / macOS arm64).
@@ -134,4 +142,4 @@ Per game; observed by the user, not yet debugged. Remove an entry once it is fix
 - Odyssey update `v393216` is 1.4.1: same code and merged RomFS as 1.3.0 (`games/odyssey/assets/expected-*.json`). The
   Odyssey builder works in `<work>/odyssey/v<version>/` and combines base + update into `<work>/odyssey/input/combined.nsp`
   (6 GB, removed after a successful build). It uses the shared source-built translator, never `games/odyssey/prebuilt/`.
-- Identifiers are `org.mng.<game>` (rule 10); upstream uses `org.macnativegames.<game>`.
+- Identifiers are `org.mng.<game>` (rule 10); upstream uses `org.mng.<game>`.
